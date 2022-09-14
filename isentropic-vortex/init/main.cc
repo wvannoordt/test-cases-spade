@@ -29,6 +29,7 @@ int main(int argc, char** argv)
     //==========================================================================
     const real_t targ_cfl         = input["Config"]["cfl"];
     const real_t inner_cfl        = input["Config"]["icfl"];
+    const real_t error_tol        = input["Config"]["tol"];
     const real_t beta             = input["Config"]["beta"];
     const int    nt_max           = input["Config"]["nt_max"];
     const int    nt_skip          = input["Config"]["nt_skip"];
@@ -115,8 +116,8 @@ int main(int argc, char** argv)
         grid.exchange_array(prim);
     }
     
-    spade::convective::totani_lr tscheme(air);
-    spade::convective::weno_3    wscheme(air);
+    spade::convective::totani_lr        tscheme(air);
+    spade::convective::pressure_diss_lr dscheme(air, 0.1);
     
     struct p2c_t
     {
@@ -171,12 +172,12 @@ int main(int argc, char** argv)
         rhs = 0.0;
         grid.exchange_array(q);
         spade::pde_algs::flux_div(q, rhs, tscheme);
+        // spade::pde_algs::flux_div(q, rhs, dscheme);
     };
     
     
     int max_its = 5000000;
-    spade::static_math::int_const_t<3> bdf_order;
-    const real_t error_tol = 5e-9;
+    spade::static_math::int_const_t<2> bdf_order;
     const int ndof = grid.grid_size();
     auto error_norm = [&](const auto& r) -> real_t
     {
@@ -196,7 +197,7 @@ int main(int argc, char** argv)
     spade::algs::iterative_control convergence_crit(rhs, error_norm, error_tol, max_its);
     spade::time_integration::dual_time_t time_int(prim, rhs, time0, dt, dt*(inner_cfl/targ_cfl), calc_rhs, convergence_crit, bdf_order, trans, preconditioner);
     
-    // spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, ftrans, itrans);
+    // spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
     
     std::ofstream myfile("hist.dat");
     for (auto nt: range(0, nt_max+1))
