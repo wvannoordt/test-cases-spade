@@ -79,8 +79,7 @@ int main(int argc, char** argv)
     flux_t fill2 = 0.0;
     
     spade::grid::grid_array prim (grid, fill1);
-    spade::grid::grid_array rhs (grid, fill2);
-    
+    spade::grid::grid_array rhs  (grid, fill2);
     
     const real_t sintheta = std::sin(theta_d*spade::consts::pi/180.0);
     const real_t costheta = std::cos(theta_d*spade::consts::pi/180.0);
@@ -222,7 +221,7 @@ int main(int argc, char** argv)
             if (group.isroot()) print("Output solution...");
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "prims"+nstr;
-            spade::io::output_vtk("output", filename, grid, prim);
+            spade::io::output_vtk("output", filename, prim);
             if (group.isroot()) print("Done.");
         }
         if (nt%checkpoint_skip == 0)
