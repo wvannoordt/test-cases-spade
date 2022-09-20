@@ -1,0 +1,23 @@
+Grid
+{
+    num_blocks = [16, 4, 3]
+    num_cells  = [32, 32, 32]
+    num_exchg  = [2, 2, 2]
+    dims       = [0.0, 12.0, -1.0, 1.0, 0.0, 5.0]
+}
+Time
+{
+    cfl        = 0.25
+    nt_max     = 1000000
+    nt_skip    = 100
+    ck_skip    = 2500
+}
+Fluid
+{
+    Twall      = 100.0
+    Tref       = 700.0
+    mu_ref     = 3.0e-4
+    u0         = 1202.697
+    p0         = 570.233265072
+	prandtl    = 0.72
+}
