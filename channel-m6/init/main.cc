@@ -109,6 +109,7 @@ int main(int argc, char** argv)
     real_t                mu_ref = input["Fluid"]["mu_ref"];
     real_t                    p0 = input["Fluid"]["p0"];
     real_t                    u0 = input["Fluid"]["u0"];
+    real_t               prandtl = input["Fluid"]["prandtl"];
     
     spade::coords::identity<real_t> coords;
     
@@ -139,9 +140,8 @@ int main(int argc, char** argv)
     spade::grid::grid_array prim (grid, fill1);
     spade::grid::grid_array rhs (grid, fill2);
     
-    spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4);
-    // spade::viscous_laws::power_law<real_t> visc_law(3.0e-4, Twall, 0.76);
-    visc_law.prandtl = 0.72;
+    //spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4);
+    spade::viscous_laws::power_law_t<real_t> visc_law(3.0e-4, Twall, 0.76, prandtl);
     
     spade::fluid_state::perfect_gas_t<real_t> air;
     air.R = 287.15;
