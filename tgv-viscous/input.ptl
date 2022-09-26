@@ -5,7 +5,7 @@ Config
 	tol       = 1e-5
     beta      = 0.5
     nt_max    = 5000
-    nt_skip   = 50
+    nt_skip   = 500
     ck_skip   = 1000
     nx_cell   = 32
     ny_cell   = 32
@@ -14,12 +14,12 @@ Config
     ny_blck   = 4
     nz_blck   = 4
     nguard    = 2
-    xmin      = -3.14159265355
-    xmax      =  3.14159265355
-    ymin      = -3.14159265355
-    ymax      =  3.14159265355
-    zmin      = -3.14159265355
-    zmax      =  3.14159265355
+    xmin      = 0.0
+    xmax      = 3.14159265355
+    ymin      = 0.0
+    ymax      = 3.14159265355
+    zmin      = 0.0
+    zmax      = 3.14159265355
     init_file = none
 }
 Fluid
