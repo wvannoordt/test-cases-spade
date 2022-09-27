@@ -53,7 +53,7 @@ int main(int argc, char** argv)
     const real_t T_ref            = input["Fluid"]["T_ref"];
     const real_t gamma            = input["Fluid"]["gamma"];
     const real_t cp               = input["Fluid"]["cp"];
-    const real_t theta_d          = input["Fluid"]["theta_d"];
+    const real_t diss_coeff       = input["Fluid"]["diss_coeff"];
     
     spade::fluid_state::perfect_gas_t<real_t> air;
     air.gamma = gamma;
@@ -118,9 +118,6 @@ int main(int argc, char** argv)
         grid.exchange_array(prim);
     }
     
-    spade::convective::totani_lr tscheme(air);
-    spade::viscous::visc_lr      visc_scheme(visc_law);
-    
     struct p2c_t
     {
         const spade::fluid_state::perfect_gas_t<real_t>* gas;
@@ -167,17 +164,18 @@ int main(int argc, char** argv)
     const real_t dx = spade::utils::min(grid.get_dx(0), grid.get_dx(1), grid.get_dx(2));
     const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
     const real_t dt     = targ_cfl*dx/umax_ini;
+
+    spade::convective::pressure_diss_lr diss_scheme(air, diss_coeff);
+    spade::convective::totani_lr        cent_scheme(air);
+    spade::viscous::visc_lr             visc_scheme(visc_law);
     
     trans_t trans(air, prim);
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
         rhs = 0.0;
         grid.exchange_array(q);
-        // spade::pde_algs::flux_div(q, rhs, tscheme);
-        // spade::pde_algs::flux_div(q, rhs, visc_scheme);
-        
-        spade::pde_algs::flux_div(q, rhs, tscheme, visc_scheme);
-        // spade::pde_algs::flux_div(q, rhs, dscheme);
+	spade::pde_algs::flux_div(q, rhs, cent_scheme, visc_scheme, diss_scheme);
+	//spade::pde_algs::flux_div(q, rhs, cent_scheme, visc_scheme);
     };
     
     

@@ -1,33 +1,33 @@
 Config
 {
-    cfl       = 0.3
-    icfl      = 2.0
-	tol       = 1e-5
-    beta      = 0.5
-    nt_max    = 5000
-    nt_skip   = 500
-    ck_skip   = 1000
-    nx_cell   = 32
-    ny_cell   = 32
-    nz_cell   = 32
-    nx_blck   = 4
-    ny_blck   = 4
-    nz_blck   = 4
-    nguard    = 2
-    xmin      = 0.0
-    xmax      = 3.14159265355
-    ymin      = 0.0
-    ymax      = 3.14159265355
-    zmin      = 0.0
-    zmax      = 3.14159265355
-    init_file = none
+    cfl        = 0.3
+    icfl       = 2.5
+    tol        = 1e-5
+    beta       = 0.5
+    nt_max     = 50000
+    nt_skip    = 1000
+    ck_skip    = 1000
+    nx_cell    = 64
+    ny_cell    = 64
+    nz_cell    = 64
+    nx_blck    = 4
+    ny_blck    = 4
+    nz_blck    = 4
+    nguard     = 2
+    xmin       = -3.14159265355
+    xmax       =  3.14159265355
+    ymin       = -3.14159265355
+    ymax       =  3.14159265355
+    zmin       = -3.14159265355
+    zmax       =  3.14159265355
+    init_file  = none
 }
 Fluid
 {
-    mach      = 0.1
-    reynolds  = 1600.0
-    T_ref     = 10.0
-    gamma     = 1.4
-    cp        = 3.5
-    theta_d   = 0.0
+    mach       = 0.1
+    reynolds   = 1600.0
+    T_ref      = 10.0
+    gamma      = 1.4
+    cp         = 3.5
+    diss_coeff = 0.25
 }

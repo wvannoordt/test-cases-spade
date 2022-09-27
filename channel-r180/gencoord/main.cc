@@ -81,8 +81,8 @@ int main(int argc, char** argv)
     
     const real_t targ_cfl = 0.2;
     const int    nt_max   = 450001;
-    const int    nt_skip  = 25000;
-    const int    checkpoint_skip  = 25000;
+    const int    nt_skip  = 25000000;
+    const int    checkpoint_skip  = 2500;
     
     spade::coords::identity_1D<real_t> xc;
     spade::coords::integrated_tanh_1D<real_t> yc(bounds.min(1), bounds.max(1), 0.1, 1.3);
