@@ -35,7 +35,8 @@ namespace proto
         for (auto lb: range(0, grid.get_num_local_blocks()))
         {
             auto lb_glob = grid.get_partition().get_global_block(lb);
-            if (grid.is_domain_boundary(lb_glob, boundary_id))
+            const auto& idomain = grid.is_domain_boundary(lb_glob);
+            if (idomain(idir, pm))
             {
                 for (auto i: flx_rg)
                 {
@@ -43,19 +44,7 @@ namespace proto
                     spade::grid::face_idx_t i_f = spade::grid::cell_to_face(i_c, idir, pm);
                     auto x = grid.get_coords(i_f);
                     typename flux_func_t::input_type flux_data;
-                    spade::flux_input::get_flux_data(grid, prim, i_f, flux_data);
-                    // if (grid.group().isroot() && boundary_id == 3)
-                    // {
-                    //     const auto& ql = std::get<0>(flux_data.cell_data.left.elements).data;
-                    //     const auto& qr = std::get<0>(flux_data.cell_data.right.elements).data;
-                    //     print(i_c, i_f);
-                    //     print(spade::grid::face_to_cell(i_f, 0));
-                    //     print(spade::grid::face_to_cell(i_f, 1));
-                    //     print("ql", ql);
-                    //     print("qr", qr);
-                    //     print("flx", func.calc_flux(flux_data));
-                    //     grid.group().pause();
-                    // }
+                    spade::fetch::get_flux_data(grid, prim, i_f, flux_data);
                     auto flux = func.calc_flux(flux_data);
                     flux *= dA;
                     sum_op.reduce_elem(flux);

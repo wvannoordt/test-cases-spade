@@ -24,7 +24,8 @@ void set_channel_noslip(auto& prims)
         int idc = 0;
         for (int dir = 2; dir <= 3; ++dir)
         {
-            if (grid.is_domain_boundary(lb_glob, dir))
+            const auto& idomain = grid.is_domain_boundary(lb_glob);
+            if (idomain(dir/2, dir%2))
             {
                 const auto lb_idx = spade::ctrs::expand_index(lb_glob, grid.get_num_blocks());
                 const auto nvec_out = v3i(0,2*idc-1,0);
@@ -61,7 +62,7 @@ int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
     
-    const std::size_t dim = 2;
+    const std::size_t dim = 3;
     
     bool init_from_file = false;
     std::string init_filename = "";
@@ -110,6 +111,8 @@ int main(int argc, char** argv)
     real_t                    p0 = input["Fluid"]["p0"];
     real_t                    u0 = input["Fluid"]["u0"];
     real_t               prandtl = input["Fluid"]["prandtl"];
+    real_t            wall_shear = input["Fluid"]["wall_shear"];
+    real_t                 rho_b = input["Fluid"]["rho_b"];
     
     spade::coords::identity<real_t> coords;
     
@@ -199,42 +202,21 @@ int main(int argc, char** argv)
     
     
     
-    struct trans_t
-    {
-        using gas_t = spade::fluid_state::perfect_gas_t<real_t>;
-        const gas_t* gas;
-        
-        struct p2c_t
-        {
-            const gas_t* gas;
-            typedef prim_t arg_type;
-            p2c_t(const gas_t& gas_in) {gas = &gas_in;}
-            cons_t operator () (const prim_t& q) const
-            {
-                cons_t w;
-                spade::fluid_state::convert_state(q, w, *gas);
-                return w;
-            };
-        };
-        struct c2p_t
-        {
-            const gas_t* gas;
-            typedef cons_t arg_type;
-            c2p_t(const gas_t& gas_in) {gas = &gas_in;}
-            prim_t operator () (const cons_t& w) const
-            {
-                prim_t q;
-                spade::fluid_state::convert_state(w, q, *gas);
-                return q;
-            }
-        };
-        
-        trans_t(const gas_t& gas_in) { gas = &gas_in; }
-        
-        void transform_forward (decltype(prim)& q) const { spade::algs::transform_inplace(q, p2c_t(*gas)); }
-        void transform_inverse (decltype(prim)& q) const { spade::algs::transform_inplace(q, c2p_t(*gas)); }
-    } trans(air);
+    trans_t trans(air, prim);
     
+    const real_t force_term = wall_shear/(delta*rho_b);
+    struct cns_force_t
+    {
+        using input_type = spade::fetch::cell_fetch_t
+        <
+            spade::fetch::cell_mono
+            <
+                spade::fetch::cell_state<prim_t>
+            >
+        >;
+        real_t source_term;
+        cns_force_t(const real_t& fin) {source_term = fin;}
+    } source(force_term);
     
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
@@ -242,7 +224,7 @@ int main(int argc, char** argv)
         grid.exchange_array(q);
         set_channel_noslip(q);
         spade::pde_algs::flux_div(q, rhs, tscheme);
-        spade::pde_algs::flux_div(prim, rhs, visc_scheme);
+        spade::pde_algs::flux_div(q, rhs, visc_scheme);
     };
     
     spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
