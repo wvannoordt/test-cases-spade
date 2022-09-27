@@ -167,12 +167,13 @@ int main(int argc, char** argv)
     const real_t dt     = targ_cfl*dx/umax_ini;
     
     trans_t trans(air, prim);
+    auto block_policy = spade::pde_algs::block_flux_all;
+    spade::bound_box_t<bool,grid.dim()> boundary_flux(true);
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
         rhs = 0.0;
         grid.exchange_array(q);
-        spade::pde_algs::flux_div(q, rhs, tscheme);
-        // spade::pde_algs::flux_div(q, rhs, dscheme);
+        spade::pde_algs::flux_div(q, rhs, block_policy, boundary_flux, tscheme);
     };
     
     

@@ -7,9 +7,9 @@ Config
     nt_max     = 50000
     nt_skip    = 1000
     ck_skip    = 1000
-    nx_cell    = 64
-    ny_cell    = 64
-    nz_cell    = 64
+    nx_cell    = 32
+    ny_cell    = 32
+    nz_cell    = 32
     nx_blck    = 4
     ny_blck    = 4
     nz_blck    = 4

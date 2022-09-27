@@ -174,8 +174,7 @@ int main(int argc, char** argv)
     {
         rhs = 0.0;
         grid.exchange_array(q);
-	spade::pde_algs::flux_div(q, rhs, cent_scheme, visc_scheme, diss_scheme);
-	//spade::pde_algs::flux_div(q, rhs, cent_scheme, visc_scheme);
+        spade::pde_algs::flux_div(q, rhs, cent_scheme, visc_scheme, diss_scheme);    
     };
     
     
