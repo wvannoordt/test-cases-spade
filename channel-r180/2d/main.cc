@@ -90,21 +90,19 @@ int main(int argc, char** argv)
         }
     }
     
-    spade::ctrs::array<int, 2> num_blocks(8, 8);
-    spade::ctrs::array<int, 2> cells_in_block(48, 48);
+    spade::ctrs::array<int, 2> num_blocks(4, 4);
+    spade::ctrs::array<int, 2> cells_in_block(24, 48);
     spade::ctrs::array<int, 2> exchange_cells(2, 2);
     spade::bound_box_t<real_t, 2> bounds;
     const real_t re_tau = 180.0;
     const real_t delta = 1.0;
     bounds.min(0) =  0.0;
-    bounds.max(0) =  4.0*spade::consts::pi*delta;
+    bounds.max(0) =  2.0*spade::consts::pi*delta;
     bounds.min(1) = -delta;
     bounds.max(1) =  delta;
-    //    bounds.min(2) =  0.0;
-    //    bounds.max(2) =  2*spade::consts::pi*delta;
     
     const real_t targ_cfl = 0.25;
-    const int    nt_max   = 300001;
+    const int    nt_max   = 60001;
     const int    nt_skip  = 500;
     const int    checkpoint_skip  = 500;
     
@@ -148,34 +146,16 @@ int main(int argc, char** argv)
     const real_t force_term = rho*u_tau*u_tau/delta;
     const real_t du = 3.0;
     
-    const int nidx = 8;
-    std::vector<real_t> r_amp_1(cells_in_block[0]/nidx);
-    std::vector<real_t> r_amp_2(cells_in_block[1]/nidx);
-    std::vector<real_t> r_amp_4(grid.get_partition().get_num_local_blocks());
-    
-    for (auto& p: r_amp_1) p = 1.0 - 2.0*spade::utils::unitary_random();
-    for (auto& p: r_amp_2) p = 1.0 - 2.0*spade::utils::unitary_random();
-    for (auto& p: r_amp_4) p = 1.0 - 2.0*spade::utils::unitary_random();
-    
     auto ini = [&](const spade::ctrs::array<real_t, 3> x, const int& i, const int& j, const int& k, const int& lb) -> prim_t
     {
         const real_t shape = 1.0 - pow(x[1]/delta, 4);
         const real_t turb  = du*u_tau*sin(10.0*spade::consts::pi*x[1])*cos(12*x[0])*cos(6*x[2]);
         prim_t output;
-        output.p() = p0 + 0.1*p0*((j+i)%2);
-        output.T() = t0;
-        output.u() = (20.0*u_tau + 0.0*turb)*shape;
-        output.v() = (0.0        + 0.0*turb)*shape;
-        output.w() = (0.0        + 0.0*turb)*shape;
-        
-        int eff_i = i/nidx;
-        int eff_j = j/nidx;
-        int eff_k = k/nidx;
-        
-        const real_t per = du*u_tau*(r_amp_1[eff_i] + r_amp_2[eff_j] + r_amp_4[lb]);
-        output.u() += per*shape;
-        output.v() += per*shape;
-        output.w() += per*shape;
+        output.p() = p0;
+        output.T() = t0 + 0.1*t0*pow(shape, 400);
+        output.u() = 20.0*u_tau*shape;
+        output.v() = 0.0;
+        output.w() = 0.0;
         
         return output;
     };
@@ -260,9 +240,7 @@ int main(int argc, char** argv)
         rhs = 0.0;
         grid.exchange_array(q);
         set_channel_noslip(q);
-        spade::pde_algs::flux_div(q, rhs, tscheme, visc_scheme, diss_scheme);
-        // spade::pde_algs::flux_div(prim, rhs, visc_scheme);
-        
+        spade::pde_algs::flux_div(q, rhs, tscheme, visc_scheme);
         //Wishlist
         // rhs = 0.0;
         // grid.begin_exchange_array(q);
