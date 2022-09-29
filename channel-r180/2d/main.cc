@@ -194,7 +194,6 @@ int main(int argc, char** argv)
     spade::convective::totani_lr tscheme(air);
     spade::convective::weno_3    wscheme(air);
     spade::viscous::visc_lr  visc_scheme(visc_law);
-    spade::convective::pressure_diss_lr diss_scheme(air, 0.025, 0.025);
     
     struct get_u_t
     {

@@ -166,7 +166,9 @@ int main(int argc, char** argv)
     const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
     const real_t dt     = targ_cfl*dx/umax_ini;
     
-    trans_t trans(air, prim);
+    cons_t transform_state;
+    spade::fluid_state::state_transform_t trans(prim, transform_state, air);
+    // trans_t trans(air, prim);
     auto block_policy = spade::pde_algs::block_flux_all;
     spade::bound_box_t<bool,grid.dim()> boundary_flux(true);
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
