@@ -119,32 +119,6 @@ int main(int argc, char** argv)
     spade::convective::totani_lr        tscheme(air);
     spade::convective::pressure_diss_lr dscheme(air, 0.1);
     
-    struct p2c_t
-    {
-        const spade::fluid_state::perfect_gas_t<real_t>* gas;
-        typedef prim_t arg_type;
-        p2c_t(const spade::fluid_state::perfect_gas_t<real_t>& gas_in) {gas = &gas_in;}
-        cons_t operator () (const prim_t& q) const
-        {
-            cons_t w;
-            spade::fluid_state::convert_state(q, w, *gas);
-            return w;
-        }
-    } p2c(air);
-    
-    struct c2p_t
-    {
-        const spade::fluid_state::perfect_gas_t<real_t>* gas;
-        typedef cons_t arg_type;
-        c2p_t(const spade::fluid_state::perfect_gas_t<real_t>& gas_in) {gas = &gas_in;}
-        prim_t operator () (const cons_t& w) const
-        {
-            prim_t q;
-            spade::fluid_state::convert_state(w, q, *gas);
-            return q;
-        }
-    } c2p(air);
-    
     struct get_u_t
     {
         const spade::fluid_state::perfect_gas_t<real_t>* gas;
@@ -168,7 +142,7 @@ int main(int argc, char** argv)
     
     cons_t transform_state;
     spade::fluid_state::state_transform_t trans(prim, transform_state, air);
-    // trans_t trans(air, prim);
+    
     auto block_policy = spade::pde_algs::block_flux_all;
     spade::bound_box_t<bool,grid.dim()> boundary_flux(true);
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void

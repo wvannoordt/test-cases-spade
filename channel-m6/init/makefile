@@ -19,7 +19,7 @@ flags += -fconcepts-diagnostics-depth=3
 # flags += -fsanitize=undefined,address
 
 main:
-	${cc} -std=c++20 -g -O3 ${flags} ${compflags} -I${spade} -I${PTL}/include main.cc -o ${target} -L${PTL}/lib -lPTL
+	${cc} -std=c++20 -g -O3 ${flags} ${compflags} -I${spade} -I${PTL}/include -I${HYWALL}/include main.cc -o ${target} -L${PTL}/lib -lPTL -L${HYWALL}/lib -lHyWall
 
 run: main
 	./${target}

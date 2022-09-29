@@ -197,41 +197,8 @@ int main(int argc, char** argv)
     
     
     
-    struct trans_t
-    {
-        using gas_t = spade::fluid_state::perfect_gas_t<real_t>;
-        const gas_t* gas;
-        
-        struct p2c_t
-        {
-            const gas_t* gas;
-            typedef prim_t arg_type;
-            p2c_t(const gas_t& gas_in) {gas = &gas_in;}
-            cons_t operator () (const prim_t& q) const
-            {
-                cons_t w;
-                spade::fluid_state::convert_state(q, w, *gas);
-                return w;
-            };
-        };
-        struct c2p_t
-        {
-            const gas_t* gas;
-            typedef cons_t arg_type;
-            c2p_t(const gas_t& gas_in) {gas = &gas_in;}
-            prim_t operator () (const cons_t& w) const
-            {
-                prim_t q;
-                spade::fluid_state::convert_state(w, q, *gas);
-                return q;
-            }
-        };
-        
-        trans_t(const gas_t& gas_in) { gas = &gas_in; }
-        
-        void transform_forward (decltype(prim)& q) const { spade::algs::transform_inplace(q, p2c_t(*gas)); }
-        void transform_inverse (decltype(prim)& q) const { spade::algs::transform_inplace(q, c2p_t(*gas)); }
-    } trans(air);
+    cons_t transform_state;
+    spade::fluid_state::state_transform_t trans(prim, transform_state, air);
     
     
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void

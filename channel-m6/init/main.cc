@@ -1,5 +1,6 @@
 #include <chrono>
 #include "spade.h"
+#include "proto/hywall_interop.h"
 
 #include "typedef.h"
 #include "c2p.h"
@@ -202,7 +203,8 @@ int main(int argc, char** argv)
     
     
     
-    trans_t trans(air, prim);
+    cons_t transform_state;
+    spade::fluid_state::state_transform_t trans(prim, transform_state, air);
     
     const real_t force_term = wall_shear/(delta*rho_b);
     struct cns_force_t
@@ -218,30 +220,34 @@ int main(int argc, char** argv)
         cns_force_t(const real_t& fin) {source_term = fin;}
     } source(force_term);
     
+    spade::proto::hywall_binding_t wall_model(prim, air);
+    wall_model.read(input["WallModel"]);
+    
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
         rhs = 0.0;
         grid.exchange_array(q);
         set_channel_noslip(q);
         spade::pde_algs::flux_div(q, rhs, tscheme);
-        spade::pde_algs::flux_div(q, rhs, visc_scheme);
+        
+        auto policy = spade::pde_algs::block_flux_all;
+        spade::bound_box_t<bool, grid.dim()> boundary = true;
+        boundary.min(1) = false;
+        boundary.max(1) = false;
+        spade::pde_algs::flux_div(q, rhs, policy, boundary, visc_scheme);
+        
+        spade::io::output_vtk("output", "rhs", rhs);
+        group.pause();
     };
     
     spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
     
     std::ofstream myfile("hist.dat");
-    for (auto nti: range(0, nt_max+1))
+    for (auto nt: range(0, nt_max+1))
     {
-        int nt = nti;
         const real_t umax   = spade::algs::transform_reduce(prim, get_u, max_op);
         real_t ub, rhob;
         calc_u_bulk(prim, air, ub, rhob);
-        const real_t area = bounds.size(0)*bounds.size(2);
-        auto conv2 = proto::get_domain_boundary_flux(prim, visc_scheme, 2);
-        auto conv3 = proto::get_domain_boundary_flux(prim, visc_scheme, 3);
-        conv2 /= area;
-        conv3 /= area;
-        const real_t tau = 0.5*(spade::utils::abs(conv2.x_momentum()) + spade::utils::abs(conv3.x_momentum()));
         
         if (group.isroot())
         {
@@ -253,11 +259,10 @@ int main(int argc, char** argv)
                 "u+a:", spade::utils::pad_str(umax, pn),
                 "ub: ", spade::utils::pad_str(ub,   pn),
                 "rb: ", spade::utils::pad_str(rhob, pn),
-                "tau:", spade::utils::pad_str(tau,  pn),
                 "dx: ", spade::utils::pad_str(dx,   pn),
                 "dt: ", spade::utils::pad_str(dt,   pn)
             );
-            myfile << nt << " " << cfl << " " << umax << " " << ub << " " << rhob << " " << tau << " " << dx << " " << dt << std::endl;
+            myfile << nt << " " << cfl << " " << umax << " " << ub << " " << rhob << " " << dx << " " << dt << std::endl;
             myfile.flush();
         }
         if (nt%nt_skip == 0)
@@ -291,7 +296,6 @@ int main(int argc, char** argv)
             return 155;
         }
     }
-    
     
     return 0;
 }
