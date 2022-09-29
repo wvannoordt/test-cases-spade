@@ -222,6 +222,8 @@ int main(int argc, char** argv)
     
     spade::proto::hywall_binding_t wall_model(prim, air);
     wall_model.read(input["WallModel"]);
+    wall_model.init(prim);
+    wall_model.set_dt(dt);
     
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
