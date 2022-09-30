@@ -59,6 +59,39 @@ void set_channel_noslip(auto& prims)
     }
 }
 
+template <typename gas_t> struct cns_force_t
+{
+    using input_type = spade::fetch::cell_fetch_t
+    <
+        spade::fetch::cell_mono
+        <
+            spade::fetch::cell_info
+            <
+                spade::fetch::cell_state<prim_t>
+            >
+        >
+    >;
+    using output_type = spade::fluid_state::flux_t<real_t>;
+    real_t source_term;
+    const gas_t* gas;
+    cns_force_t(const real_t& fin, const gas_t& gas_in) {source_term = fin; gas = &gas_in;}
+    output_type operator() (const input_type& input) const
+    {
+        const auto& q = std::get<0>(input.cell_data.mono_data.elements).data;
+        cons_t w;
+        spade::fluid_state::convert_state(q, w, *gas);
+        const real_t rho = w.rho();
+        output_type output;
+        output.continuity() = 0.0;
+        output.energy()     = rho*source_term*q.u();
+        output.x_momentum() = rho*source_term;
+        output.y_momentum() = 0.0;
+        output.z_momentum() = 0.0;
+        return output;
+    }
+    
+};
+
 int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
@@ -207,18 +240,7 @@ int main(int argc, char** argv)
     spade::fluid_state::state_transform_t trans(prim, transform_state, air);
     
     const real_t force_term = wall_shear/(delta*rho_b);
-    struct cns_force_t
-    {
-        using input_type = spade::fetch::cell_fetch_t
-        <
-            spade::fetch::cell_mono
-            <
-                spade::fetch::cell_state<prim_t>
-            >
-        >;
-        real_t source_term;
-        cns_force_t(const real_t& fin) {source_term = fin;}
-    } source(force_term);
+    cns_force_t source(force_term, air);
     
     spade::bound_box_t<bool, grid.dim()> boundary = true;
     boundary.min(1) = false;
@@ -236,6 +258,7 @@ int main(int argc, char** argv)
         rhs = 0.0;
         grid.exchange_array(q);
         set_channel_noslip(q);
+        // spade::pde_algs::flux_div(q, rhs, wscheme);
         spade::pde_algs::flux_div(q, rhs, tscheme);
         
         auto policy = spade::pde_algs::block_flux_all;
@@ -244,6 +267,8 @@ int main(int argc, char** argv)
         wall_model.sample(q, visc_law);
         wall_model.solve();
         wall_model.apply_flux(rhs);
+        
+        spade::pde_algs::source_term(rhs, q, source);
         
         // spade::io::output_vtk("output", "rhs", rhs);
         // group.pause();
