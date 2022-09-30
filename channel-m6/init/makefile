@@ -16,7 +16,9 @@ compflags += -DMPI_ENABLE=${MPI_ENABLE}
 
 flags :=
 flags += -fconcepts-diagnostics-depth=3
-# flags += -fsanitize=undefined,address
+ifeq (${sanny},1)
+flags += -fsanitize=undefined,address -fstack-protector-all
+endif
 
 main:
 	${cc} -std=c++20 -g -O3 ${flags} ${compflags} -I${spade} -I${PTL}/include -I${HYWALL}/include main.cc -o ${target} -L${PTL}/lib -lPTL -L${HYWALL}/lib -lHyWall

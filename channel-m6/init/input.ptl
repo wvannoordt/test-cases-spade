@@ -1,7 +1,7 @@
 Grid
 {
     num_blocks = [16, 4, 3]
-    num_cells  = [24, 24, 24]
+    num_cells  = [22, 24, 26]
     num_exchg  = [2, 2, 2]
     dims       = [0.0, 12.0, -1.0, 1.0, 0.0, 5.0]
 }
@@ -19,7 +19,7 @@ Fluid
     mu_ref     = 3.0e-4
     u0         = 1202.697
     p0         = 570.233265072
-	prandtl    = 0.72
+    prandtl    = 0.72
     wall_shear = 20.75
     rho_b      = 0.498742216e-02
 }

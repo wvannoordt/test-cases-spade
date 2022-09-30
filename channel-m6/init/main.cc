@@ -220,10 +220,18 @@ int main(int argc, char** argv)
         cns_force_t(const real_t& fin) {source_term = fin;}
     } source(force_term);
     
+    spade::bound_box_t<bool, grid.dim()> boundary = true;
+    boundary.min(1) = false;
+    boundary.max(1) = false;
+    
     spade::proto::hywall_binding_t wall_model(prim, air);
     wall_model.read(input["WallModel"]);
-    wall_model.init(prim);
+    for (auto& b: boundary) b = !b;
+    wall_model.init(prim, boundary);
+    for (auto& b: boundary) b = !b;
     wall_model.set_dt(dt);
+    
+    spade::io::output_vtk(".", "wm_faces", wall_model.wm_faces, grid);
     
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
@@ -233,9 +241,6 @@ int main(int argc, char** argv)
         spade::pde_algs::flux_div(q, rhs, tscheme);
         
         auto policy = spade::pde_algs::block_flux_all;
-        spade::bound_box_t<bool, grid.dim()> boundary = true;
-        boundary.min(1) = false;
-        boundary.max(1) = false;
         spade::pde_algs::flux_div(q, rhs, policy, boundary, visc_scheme);
         
         spade::io::output_vtk("output", "rhs", rhs);
