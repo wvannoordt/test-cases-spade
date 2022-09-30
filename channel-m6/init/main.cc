@@ -63,7 +63,7 @@ int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
     
-    const std::size_t dim = 3;
+    const std::size_t dim = 2;
     
     bool init_from_file = false;
     std::string init_filename = "";
@@ -145,7 +145,7 @@ int main(int argc, char** argv)
     spade::grid::grid_array rhs (grid, fill2);
     
     //spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4);
-    spade::viscous_laws::power_law_t<real_t> visc_law(3.0e-4, Twall, 0.76, prandtl);
+    spade::viscous_laws::power_law_t<real_t> visc_law(mu_ref, Twall, 0.76, prandtl);
     
     spade::fluid_state::perfect_gas_t<real_t> air;
     air.R = 287.15;
@@ -224,14 +224,12 @@ int main(int argc, char** argv)
     boundary.min(1) = false;
     boundary.max(1) = false;
     
-    spade::proto::hywall_binding_t wall_model(prim, air);
+    spade::proto::hywall_binding_t wall_model(prim, rhs, air);
     wall_model.read(input["WallModel"]);
     for (auto& b: boundary) b = !b;
     wall_model.init(prim, boundary);
     for (auto& b: boundary) b = !b;
     wall_model.set_dt(dt);
-    
-    spade::io::output_vtk(".", "wm_faces", wall_model.wm_faces, grid);
     
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
@@ -243,8 +241,12 @@ int main(int argc, char** argv)
         auto policy = spade::pde_algs::block_flux_all;
         spade::pde_algs::flux_div(q, rhs, policy, boundary, visc_scheme);
         
-        spade::io::output_vtk("output", "rhs", rhs);
-        group.pause();
+        wall_model.sample(q, visc_law);
+        wall_model.solve();
+        wall_model.apply_flux(rhs);
+        
+        // spade::io::output_vtk("output", "rhs", rhs);
+        // group.pause();
     };
     
     spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
