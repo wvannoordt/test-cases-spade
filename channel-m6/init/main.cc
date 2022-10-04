@@ -258,7 +258,7 @@ int main(int argc, char** argv)
         rhs = 0.0;
         grid.exchange_array(q);
         set_channel_noslip(q);
-        // spade::pde_algs::flux_div(q, rhs, wscheme);
+        
         spade::pde_algs::flux_div(q, rhs, tscheme);
         
         auto policy = spade::pde_algs::block_flux_all;
@@ -267,11 +267,7 @@ int main(int argc, char** argv)
         wall_model.sample(q, visc_law);
         wall_model.solve();
         wall_model.apply_flux(rhs);
-        
-        spade::pde_algs::source_term(rhs, q, source);
-        
-        // spade::io::output_vtk("output", "rhs", rhs);
-        // group.pause();
+        spade::pde_algs::source_term(q, rhs, source);
     };
     
     spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
