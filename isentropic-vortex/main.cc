@@ -43,6 +43,7 @@ int main(int argc, char** argv)
     const real_t xmax             = input["Config"]["xmax"];
     const real_t ymin             = input["Config"]["ymin"];
     const real_t ymax             = input["Config"]["ymax"];
+    const bool   do_output        = input["Config"]["output"];
     const std::string init_file   = input["Config"]["init_file"];
     const real_t u0               = input["Fluid"]["u0"];
     const real_t deltau           = input["Fluid"]["deltau"];
@@ -199,7 +200,7 @@ int main(int argc, char** argv)
             if (group.isroot()) print("Output solution...");
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "prims"+nstr;
-            spade::io::output_vtk("output", filename, prim);
+            if (do_output) spade::io::output_vtk("output", filename, prim);
             if (group.isroot()) print("Done.");
         }
         if (nt%checkpoint_skip == 0)
@@ -208,7 +209,7 @@ int main(int argc, char** argv)
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "check"+nstr;
             filename = "checkpoint/"+filename+".bin";
-            spade::io::binary_write(filename, prim);
+            if (do_output) spade::io::binary_write(filename, prim);
             if (group.isroot()) print("Done.");
         }
     	auto start = std::chrono::steady_clock::now();

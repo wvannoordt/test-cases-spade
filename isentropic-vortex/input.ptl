@@ -4,11 +4,11 @@ Config
     icfl      = 2.0
     tol       = 1e-5
     beta      = 0.5
-    nt_max    = 50000
+    nt_max    = 1500
     nt_skip   = 100
     ck_skip   = 1000
-    nx_cell   = 32
-    ny_cell   = 32
+    nx_cell   = 96
+    ny_cell   = 96
     nx_blck   = 4
     ny_blck   = 4
     nguard    = 2
@@ -17,6 +17,7 @@ Config
     ymin      = -1.0
     ymax      =  1.0
     init_file = none
+    output    = true
 }
 Fluid
 {

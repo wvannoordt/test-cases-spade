@@ -242,7 +242,7 @@ int main(int argc, char** argv)
         
         auto policy = spade::pde_algs::block_flux_all;
         spade::pde_algs::flux_div(q, rhs, policy, boundary, visc_scheme);
-        
+        static_assert(false, "need to add source term!");
         spade::io::output_vtk("output", "rhs", rhs);
         group.pause();
     };
