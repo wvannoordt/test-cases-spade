@@ -177,6 +177,7 @@ int main(int argc, char** argv)
     
     spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
     
+    spade::utils::mtimer_t tmr("advance");
     std::ofstream myfile("hist.dat");
     for (auto nt: range(0, nt_max+1))
     {
@@ -212,10 +213,11 @@ int main(int argc, char** argv)
             if (do_output) spade::io::binary_write(filename, prim);
             if (group.isroot()) print("Done.");
         }
-    	auto start = std::chrono::steady_clock::now();
+        
+    	tmr.start("advance");
         time_int.advance();
-    	auto end = std::chrono::steady_clock::now();
-    	if (group.isroot()) print("Elapsed:", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(), "ms");
+        tmr.stop("advance");
+        if (group.isroot()) print(tmr);
         if (std::isnan(umax))
         {
             if (group.isroot())
