@@ -7,10 +7,11 @@ Grid
 }
 Time
 {
-    cfl        = 0.25
-    nt_max     = 14000
-    nt_skip    = 1000
-    ck_skip    = 5000
+    cfl           = 0.25
+    nt_max        = 14000
+    nt_skip       = 1000
+    ck_skip       = 5000
+    output_timing = true
 }
 Fluid
 {

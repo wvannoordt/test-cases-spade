@@ -96,7 +96,7 @@ int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
     
-    const std::size_t dim = 2;
+    const std::size_t dim = 3;
     
     bool init_from_file = false;
     std::string init_filename = "";
@@ -138,6 +138,7 @@ int main(int argc, char** argv)
     int                 nt_max   = input["Time"]["nt_max"];
     int                 nt_skip  = input["Time"]["nt_skip"];
     int         checkpoint_skip  = input["Time"]["ck_skip"];
+    bool          output_timing  = input["Time"]["output_timing"];
     
     real_t                 Twall = input["Fluid"]["Twall"];
     real_t                  Tref = input["Fluid"]["Tref"];
@@ -184,7 +185,7 @@ int main(int argc, char** argv)
     air.R = 287.15;
     air.gamma = 1.4;
     
-    auto ini = [&](const spade::ctrs::array<real_t, 3> x, const int& i, const int& j, const int& k, const int& lb) -> prim_t
+    auto ini = [&](const spade::ctrs::array<real_t, 3> x) -> prim_t
     {
         const real_t alpha = std::sqrt(1.0 - (Twall/Tref));
         const real_t beta = 2.0*alpha*((alpha*alpha-1.0)*std::atanh(alpha) + alpha)/((alpha*alpha*alpha)*(std::log(spade::utils::abs(1.0+alpha)) - std::log(spade::utils::abs(1.0-alpha))));
@@ -252,21 +253,34 @@ int main(int argc, char** argv)
     wall_model.init(prim, boundary);
     for (auto& b: boundary) b = !b;
     wall_model.set_dt(dt);
-    
+    spade::utils::mtimer_t tmr("exchg", "bc", "fdiv", "wm", "source", "advance");
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
         rhs = 0.0;
+        tmr.start("exchg");
         grid.exchange_array(q);
-        set_channel_noslip(q);
+        tmr.stop("exchg");
         
+        tmr.start("bc");
+        set_channel_noslip(q);
+        tmr.stop("bc");
+        
+        tmr.start("fdiv");
         spade::pde_algs::flux_div(q, rhs, tscheme);
         
         auto policy = spade::pde_algs::block_flux_all;
         spade::pde_algs::flux_div(q, rhs, policy, boundary, visc_scheme);
+        tmr.stop("fdiv");
+        
+        tmr.start("wm");
         wall_model.sample(q, visc_law);
         wall_model.solve();
         wall_model.apply_flux(rhs);
+        tmr.stop("wm");
+        
+        tmr.start("source");
         spade::pde_algs::source_term(q, rhs, source);
+        tmr.stop("source");
     };
     
     spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
@@ -311,10 +325,10 @@ int main(int argc, char** argv)
             spade::io::binary_write(filename, prim);
             if (group.isroot()) print("Done.");
         }
-    	auto start = std::chrono::steady_clock::now();
+        tmr.start("advance");
         time_int.advance();
-    	auto end = std::chrono::steady_clock::now();
-    	if (group.isroot()) print("Elapsed:", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(), "ms");
+        tmr.stop("advance");
+        if (group.isroot() && output_timing) print(tmr);
         if (std::isnan(umax))
         {
             if (group.isroot())
