@@ -95,7 +95,7 @@ int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
     
-    const std::size_t dim = 2;
+    const std::size_t dim = 3;
     
     bool init_from_file = false;
     std::string init_filename = "";
@@ -184,6 +184,8 @@ int main(int argc, char** argv)
     air.R = 287.15;
     air.gamma = 1.4;
     
+    const real_t Lx = bounds.size(0);
+    const real_t Lz = bounds.size(2);
     auto ini = [&](const spade::ctrs::array<real_t, 3> x) -> prim_t
     {
         const real_t alpha = std::sqrt(1.0 - (Twall/Tref));
@@ -195,8 +197,8 @@ int main(int argc, char** argv)
         output.p() = p0;
         output.T() = Tref - (Tref - Twall)*yh*yh;
         output.u() = u0*(1.0-yh*yh)/beta;
-        output.v() = 0.0;
-        output.w() = 0.0;
+        output.v() = output.u()*0.1*std::sin(20.0*spade::consts::pi*x[0]/Lx);
+        output.w() = output.u()*0.1*std::sin(20.0*spade::consts::pi*x[2]/Lz);
         
         return output;
     };
