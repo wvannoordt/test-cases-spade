@@ -15,9 +15,8 @@ static inline bool ends_with(std::string const & value, std::string const & endi
     return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
 
-void set_channel_noslip(auto& prims)
+void set_channel_slip(auto& prims)
 {
-    const real_t t_wall = 0.1;
     const auto& grid = prims.get_grid();
     for (auto lb: range(0, grid.get_num_local_blocks()))
     {
@@ -46,10 +45,10 @@ void set_channel_noslip(auto& prims)
                         const auto n_g = calc_normal_vector(grid.coord_sys(), x_g, i_g, 1);
                         const auto n_d = calc_normal_vector(grid.coord_sys(), x_d, i_d, 1);
                         q_g.p() =  q_d.p();
-                        q_g.u() = -q_d.u();
+                        q_g.u() =  q_d.u();
                         q_g.v() = -q_d.v()*n_d[1]/n_g[1];
-                        q_g.w() = -q_d.w();
-                        q_g.T() =  t_wall;
+                        q_g.w() =  q_d.w();
+                        q_g.T() =  q_d.T();
                         for (auto n: range(0,5)) prims(n, i_g[0], i_g[1], i_g[2], i_g[3]) = q_g[n];
                     }
                 }
@@ -96,7 +95,7 @@ int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
     
-    const std::size_t dim = 3;
+    const std::size_t dim = 2;
     
     bool init_from_file = false;
     std::string init_filename = "";
@@ -188,7 +187,9 @@ int main(int argc, char** argv)
     auto ini = [&](const spade::ctrs::array<real_t, 3> x) -> prim_t
     {
         const real_t alpha = std::sqrt(1.0 - (Twall/Tref));
-        const real_t beta = 2.0*alpha*((alpha*alpha-1.0)*std::atanh(alpha) + alpha)/((alpha*alpha*alpha)*(std::log(spade::utils::abs(1.0+alpha)) - std::log(spade::utils::abs(1.0-alpha))));
+        const real_t beta = 2.0*alpha*((alpha*alpha-1.0)*std::atanh(alpha) 
+            + alpha)/((alpha*alpha*alpha)*(std::log(spade::utils::abs(1.0+alpha))
+            - std::log(spade::utils::abs(1.0-alpha))));
         const real_t yh = x[1]/delta;
         prim_t output;
         output.p() = p0;
@@ -208,7 +209,7 @@ int main(int argc, char** argv)
         spade::io::binary_read(init_filename, prim);
         if (group.isroot()) print("Init done.");
         grid.exchange_array(prim);
-        set_channel_noslip(prim);
+        set_channel_slip(prim);
     }
     
     spade::convective::totani_lr tscheme(air);
@@ -262,11 +263,12 @@ int main(int argc, char** argv)
         tmr.stop("exchg");
         
         tmr.start("bc");
-        set_channel_noslip(q);
+        set_channel_slip(q);
         tmr.stop("bc");
         
         tmr.start("fdiv");
         spade::pde_algs::flux_div(q, rhs, tscheme);
+        // spade::pde_algs::flux_div(q, rhs, tscheme, visc_scheme);
         
         auto policy = spade::pde_algs::block_flux_all;
         spade::pde_algs::flux_div(q, rhs, policy, boundary, visc_scheme);

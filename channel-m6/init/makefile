@@ -21,10 +21,12 @@ flags += -fsanitize=undefined,address -fstack-protector-all
 endif
 
 main:
+	${MAKE} -C ${HYWALL} -f makefile
 	${cc} -std=c++20 -g -O3 ${flags} ${compflags} -I${spade} -I${PTL}/include -I${HYWALL}/include main.cc -o ${target} -L${PTL}/lib -lPTL -L${HYWALL}/lib -lHyWall
 
 run: main
 	./${target}
 
 clean:
+	${MAKE} -C ${HYWALL} -f makefile clean
 	rm -f ${target}
