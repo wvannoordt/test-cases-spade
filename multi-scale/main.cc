@@ -3,6 +3,7 @@
 
 typedef double real_t;
 typedef spade::ctrs::array<real_t, 3> v3d;
+typedef spade::ctrs::array<real_t, 5> v5d;
 typedef spade::ctrs::array<int,    3> v3i;
 typedef spade::ctrs::array<int,    4> v4i;
 typedef spade::ctrs::array<spade::grid::cell_t<int>, 4> v4c;
@@ -57,34 +58,6 @@ void set_channel_noslip(auto& prims)
     }
 }
 
-void garbo_visc(auto& prims, auto& rhs, real_t mu)
-{
-    auto& grd = prims.get_grid();
-    auto rg = grd.get_range(spade::grid::cell_centered);
-    real_t dx = grd.get_dx(0);
-    real_t dy = grd.get_dx(1);
-    real_t dz = grd.get_dx(2);
-    for (auto idir: range(0, 3))
-    {
-        for (auto i: rg)
-        {
-            real_t lap = 0.0;
-            real_t d00 = prims(2+idir, i[0],   i[1],   i[2],   i[3]);
-            real_t d0p = prims(2+idir, i[0]+1, i[1],   i[2],   i[3]);
-            real_t d0m = prims(2+idir, i[0]-1, i[1],   i[2],   i[3]);
-            real_t d1p = prims(2+idir, i[0],   i[1]+1, i[2],   i[3]);
-            real_t d1m = prims(2+idir, i[0],   i[1]-1, i[2],   i[3]);
-            real_t d2p = prims(2+idir, i[0],   i[1],   i[2]+1, i[3]);
-            real_t d2m = prims(2+idir, i[0],   i[1],   i[2]-1, i[3]);
-            lap += (d0p - 2*d00 + d0m)/(dx*dx);
-            lap += (d1p - 2*d00 + d1m)/(dy*dy);
-            lap += (d2p - 2*d00 + d2m)/(dz*dz);
-            lap *= mu;
-            rhs(2+idir, i[0],   i[1],   i[2],   i[3]) += lap;
-        }
-    }
-}
-
 int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
@@ -104,24 +77,6 @@ int main(int argc, char** argv)
         }
     }
     
-    bool viz_only = false;
-    std::string viz_filename = "";
-    if (args.has_arg("-viz"))
-    {
-        viz_filename = args["-viz"];
-        if (group.isroot()) print("Converting", viz_filename);
-        viz_only = true;
-        if (!std::filesystem::exists(viz_filename))
-        {
-            if (group.isroot()) print("Cannot find viz file", viz_filename);
-            abort();
-        }
-    }
-    
-    spade::ctrs::array<int, 3> num_blocks(4, 4, 4);
-    spade::ctrs::array<int, 3> cells_in_block(16, 16, 16);
-    spade::ctrs::array<int, 3> exchange_cells(2, 2, 2);
-    //spade::ctrs::array<int, 3> exchange_cells(8, 8, 8);
     spade::bound_box_t<real_t, 3> bounds;
     const real_t re_tau = 180.0;
     const real_t delta = 1.0;
@@ -143,23 +98,26 @@ int main(int argc, char** argv)
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
     
     
-    spade::grid::cartesian_grid_t grid(num_blocks, cells_in_block, exchange_cells, bounds, coords, group);
+    spade::ctrs::array<int, 3> num_blocks_les(4, 4, 4);
+    spade::ctrs::array<int, 3> cells_in_block_les(16, 16, 16);
+    spade::ctrs::array<int, 3> exchange_cells_les(2, 2, 2);
+    spade::grid::cartesian_grid_t grid_les(num_blocks_les, cells_in_block_les, exchange_cells_les, bounds, coords, group);
+    
+    
+    spade::ctrs::array<int, 3> num_blocks_dns(4, 4, 4);
+    spade::ctrs::array<int, 3> cells_in_block_dns(16, 16, 16);
+    spade::ctrs::array<int, 3> exchange_cells_dns(2, 2, 2);
+    spade::grid::cartesian_grid_t grid_dns(num_blocks_dns, cells_in_block_dns, exchange_cells_dns, bounds, coords, group);
     
     
     prim_t fill1 = 0.0;
     flux_t fill2 = 0.0;
     
-    spade::grid::grid_array prim (grid, fill1);
+    spade::grid::grid_array prim_les(grid_les, fill1);
+    spade::grid::face_array fluxes  (grid_les, fill2);
     
-    if (viz_only)
-    {
-        spade::io::binary_read(viz_filename, prim);
-        std::string fname = spade::io::output_vtk("output", "viz", prim);
-        if (group.isroot()) print("outputting", fname);
-        return 0;
-    }
-    
-    spade::grid::grid_array rhs (grid, fill2);
+    spade::grid::grid_array prim_dns(grid_dns, fill1);
+    spade::grid::grid_array rhs_dns (grid_dns, fill2);
     
     spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4);
     visc_law.prandtl = 0.72;
@@ -175,52 +133,21 @@ int main(int argc, char** argv)
     const real_t rho = p0/(air.R*t0);
     const real_t u_tau = re_tau*mu/(rho*delta);
     const real_t force_term = rho*u_tau*u_tau/delta;
-    const real_t du = 3.0;
     
-    const int nidx = 8;
-    std::vector<real_t> r_amp_1(cells_in_block[0]/nidx);
-    std::vector<real_t> r_amp_2(cells_in_block[1]/nidx);
-    std::vector<real_t> r_amp_3(cells_in_block[2]/nidx);
-    std::vector<real_t> r_amp_4(grid.get_partition().get_num_local_blocks());
-    
-    for (auto& p: r_amp_1) p = 1.0 - 2.0*spade::utils::unitary_random();
-    for (auto& p: r_amp_2) p = 1.0 - 2.0*spade::utils::unitary_random();
-    for (auto& p: r_amp_3) p = 1.0 - 2.0*spade::utils::unitary_random();
-    for (auto& p: r_amp_4) p = 1.0 - 2.0*spade::utils::unitary_random();
-    
-    auto ini = [&](const spade::ctrs::array<real_t, 3> x, const int& i, const int& j, const int& k, const int& lb) -> prim_t
+    auto ini = [&](const spade::ctrs::array<real_t, 3>& x) -> prim_t
     {
         const real_t shape = 1.0 - pow(x[1]/delta, 4);
-        const real_t turb  = du*u_tau*sin(10.0*spade::consts::pi*x[1])*cos(12*x[0])*cos(6*x[2]);
         prim_t output;
         output.p() = p0;
         output.T() = t0;
-        output.u() = (20.0*u_tau + 0.0*turb)*shape;
-        output.v() = (0.0        + 0.0*turb)*shape;
-        output.w() = (0.0        + 0.0*turb)*shape;
-        
-        int eff_i = i/nidx;
-        int eff_j = j/nidx;
-        int eff_k = k/nidx;
-        
-        const real_t per = du*u_tau*(r_amp_1[eff_i] + r_amp_2[eff_j] + r_amp_3[eff_k] + r_amp_4[lb]);
-        output.u() += per*shape;
-        output.v() += per*shape;
-        output.w() += per*shape;
-        
+        output.u() = (20.0*u_tau)*shape;
+        output.v() = (0.0       )*shape;
+        output.w() = (0.0       )*shape;
         return output;
     };
     
-    spade::algs::fill_array(prim, ini);
-    
-    if (init_from_file)
-    {
-        if (group.isroot()) print("reading...");
-        spade::io::binary_read(init_filename, prim);
-        if (group.isroot()) print("Init done.");
-        grid.exchange_array(prim);
-        set_channel_noslip(prim);
-    }
+    spade::algs::fill_array(prim_les, ini);
+    spade::algs::fill_array(prim_dns, ini);
 
 
     spade::convective::pressure_diss_lr dscheme(air, 0.025, 0.025);
@@ -249,52 +176,13 @@ int main(int argc, char** argv)
     const real_t dt     = targ_cfl*dx/umax_ini;
     
     
-    
-    struct trans_t
-    {
-        using gas_t = spade::fluid_state::perfect_gas_t<real_t>;
-        const gas_t* gas;
-        
-        struct p2c_t
-        {
-            const gas_t* gas;
-            typedef prim_t arg_type;
-            p2c_t(const gas_t& gas_in) {gas = &gas_in;}
-            cons_t operator () (const prim_t& q) const
-            {
-                cons_t w;
-                spade::fluid_state::convert_state(q, w, *gas);
-                return w;
-            };
-        };
-        struct c2p_t
-        {
-            const gas_t* gas;
-            typedef cons_t arg_type;
-            c2p_t(const gas_t& gas_in) {gas = &gas_in;}
-            prim_t operator () (const cons_t& w) const
-            {
-                prim_t q;
-                spade::fluid_state::convert_state(w, q, *gas);
-                return q;
-            }
-        };
-        
-        trans_t(const gas_t& gas_in) { gas = &gas_in; }
-        
-        void transform_forward (decltype(prim)& q) const { spade::algs::transform_inplace(q, p2c_t(*gas)); }
-        void transform_inverse (decltype(prim)& q) const { spade::algs::transform_inplace(q, c2p_t(*gas)); }
-    } trans(air);
-    
-    
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
         rhs = 0.0;
         grid.exchange_array(q);
         set_channel_noslip(q);
         spade::pde_algs::flux_div(q, rhs, tscheme, visc_scheme, dscheme);
-        // spade::pde_algs::flux_div(prim, rhs, visc_scheme);
-        
+        spade::pde_algs::source_term(rhs, [&]()->v5d{return v5d(0,0,force_term,0,0);});
         //Wishlist
         // rhs = 0.0;
         // grid.begin_exchange_array(q);
@@ -303,16 +191,9 @@ int main(int argc, char** argv)
         // set_channel_noslip(q);
         // spade::pde_algs::flux_div(q, rhs, boundary_only, tscheme, visc_scheme);
         // Wall model too!
-        
-        spade::algs::transform_inplace(rhs, [&](const spade::ctrs::array<real_t, 5>& rhs_ar) -> spade::ctrs::array<real_t, 5> 
-        {
-            spade::ctrs::array<real_t, 5> rhs_new = rhs_ar;
-            rhs_new[2] += force_term;
-            return rhs_new;
-        });
     };
     
-    spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
+    spade::time_integration::rk2 time_int(prim_dns, rhs_dns, time0, dt, calc_rhs, trans);
     
     std::ofstream myfile("hist.dat");
     for (auto nti: range(0, nt_max))
