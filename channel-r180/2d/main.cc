@@ -76,20 +76,6 @@ int main(int argc, char** argv)
         }
     }
     
-    bool viz_only = false;
-    std::string viz_filename = "";
-    if (args.has_arg("-viz"))
-    {
-        viz_filename = args["-viz"];
-        if (group.isroot()) print("Converting", viz_filename);
-        viz_only = true;
-        if (!std::filesystem::exists(viz_filename))
-        {
-            if (group.isroot()) print("Cannot find viz file", viz_filename);
-            abort();
-        }
-    }
-    
     spade::ctrs::array<int, 2> num_blocks(4, 4);
     spade::ctrs::array<int, 2> cells_in_block(24, 48);
     spade::ctrs::array<int, 2> exchange_cells(2, 2);
@@ -119,14 +105,6 @@ int main(int argc, char** argv)
     flux_t fill2 = 0.0;
     
     spade::grid::grid_array prim (grid, fill1);
-    
-    if (viz_only)
-    {
-        spade::io::binary_read(viz_filename, prim);
-        std::string fname = spade::io::output_vtk("output", "viz", prim);
-        if (group.isroot()) print("outputting", fname);
-        return 0;
-    }
     
     spade::grid::grid_array rhs (grid, fill2);
     

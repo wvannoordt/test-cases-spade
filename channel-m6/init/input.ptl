@@ -24,6 +24,11 @@ Fluid
     wall_shear = 20.75
     rho_b      = 0.498742216e-02
 }
+Num
+{
+    eps_p      = 0.25
+    eps_T      = 0.25
+}
 WallModel
 {
     enableTransitionSensor       = false // Enable Transition Sensor
