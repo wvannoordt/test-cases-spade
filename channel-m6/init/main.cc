@@ -148,6 +148,9 @@ int main(int argc, char** argv)
     real_t            wall_shear = input["Fluid"]["wall_shear"];
     real_t                 rho_b = input["Fluid"]["rho_b"];
     
+    real_t                eps_p  = input["Num"]["eps_p"];
+    real_t                eps_T  = input["Num"]["eps_T"];
+    
     spade::coords::identity<real_t> coords;
     
     std::filesystem::path out_path("checkpoint");
@@ -186,7 +189,7 @@ int main(int argc, char** argv)
     
     const real_t Lx = bounds.size(0);
     const real_t Lz = bounds.size(2);
-    auto ini = [&](const spade::ctrs::array<real_t, 3> x) -> prim_t
+    auto ini = [&](const spade::ctrs::array<real_t, 3>& x) -> prim_t
     {
         const real_t alpha = std::sqrt(1.0 - (Twall/Tref));
         const real_t beta = 2.0*alpha*((alpha*alpha-1.0)*std::atanh(alpha) 
@@ -205,6 +208,7 @@ int main(int argc, char** argv)
     
     spade::algs::fill_array(prim, ini);
     
+    
     if (init_from_file)
     {
         if (group.isroot()) print("reading...");
@@ -214,8 +218,8 @@ int main(int argc, char** argv)
         set_channel_slip(prim);
     }
     
-    spade::convective::totani_lr tscheme(air);
-    spade::convective::weno_3    wscheme(air);
+    spade::convective::totani_lr        tscheme(air);
+    spade::convective::pressure_diss_lr dscheme(air, eps_p, eps_T);
     spade::viscous::visc_lr  visc_scheme(visc_law);
     
     struct get_u_t
@@ -269,7 +273,7 @@ int main(int argc, char** argv)
         tmr.stop("bc");
         
         tmr.start("fdiv");
-        spade::pde_algs::flux_div(q, rhs, tscheme);
+        spade::pde_algs::flux_div(q, rhs, tscheme, dscheme);
         // spade::pde_algs::flux_div(q, rhs, tscheme, visc_scheme);
         
         auto policy = spade::pde_algs::block_flux_all;
@@ -343,6 +347,5 @@ int main(int argc, char** argv)
             return 155;
         }
     }
-    
     return 0;
 }
