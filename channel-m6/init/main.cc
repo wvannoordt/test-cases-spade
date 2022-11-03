@@ -208,7 +208,6 @@ int main(int argc, char** argv)
     
     spade::algs::fill_array(prim, ini);
     
-    
     if (init_from_file)
     {
         if (group.isroot()) print("reading...");
