@@ -8,9 +8,9 @@ Grid
 Time
 {
     cfl           = 0.25
-    nt_max        = 14000
-    nt_skip       = 1000
-    ck_skip       = 5000
+    nt_max        = 140000
+    nt_skip       = 100000
+    ck_skip       = 1000
     output_timing = true
 }
 Fluid
@@ -23,6 +23,11 @@ Fluid
     prandtl    = 0.72
     wall_shear = 20.75
     rho_b      = 0.498742216e-02
+}
+Num
+{
+    eps_p      = 0.25
+    eps_T      = 0.25
 }
 WallModel
 {
