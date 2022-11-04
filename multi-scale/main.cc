@@ -1,4 +1,5 @@
 #include <chrono>
+#include <typeinfo>
 #include "spade.h"
 
 typedef double real_t;
@@ -62,21 +63,6 @@ int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
     
-    bool init_from_file = false;
-    std::string init_filename = "";
-    spade::cli_args::shortname_args_t args(argc, argv);
-    if (args.has_arg("-init"))
-    {
-        init_filename = args["-init"];
-        if (group.isroot()) print("Initialize from", init_filename);
-        init_from_file = true;
-        if (!std::filesystem::exists(init_filename))
-        {
-            if (group.isroot()) print("Cannot find ini file", init_filename);
-            abort();
-        }
-    }
-    
     spade::bound_box_t<real_t, 3> bounds;
     const real_t re_tau = 180.0;
     const real_t delta = 1.0;
@@ -92,7 +78,11 @@ int main(int argc, char** argv)
     const int    nt_skip  = 5000;
     const int    checkpoint_skip  = 2500;
     
-    spade::coords::identity<real_t> coords;
+    spade::coords::identity<real_t> coords_les;
+    spade::coords::identity_1D<real_t> xc;
+    spade::coords::integrated_tanh_1D<real_t> yc(bounds.min(1), bounds.max(1), 0.1, 1.3);
+    spade::coords::identity_1D<real_t> zc;
+    spade::coords::diagonal_coords coords_dns(xc, yc, zc);
     
     std::filesystem::path out_path("checkpoint");
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
@@ -101,23 +91,24 @@ int main(int argc, char** argv)
     spade::ctrs::array<int, 3> num_blocks_les(4, 4, 4);
     spade::ctrs::array<int, 3> cells_in_block_les(16, 16, 16);
     spade::ctrs::array<int, 3> exchange_cells_les(2, 2, 2);
-    spade::grid::cartesian_grid_t grid_les(num_blocks_les, cells_in_block_les, exchange_cells_les, bounds, coords, group);
+    spade::grid::cartesian_grid_t grid_les(num_blocks_les, cells_in_block_les, exchange_cells_les, bounds, coords_les, group);
     
     
     spade::ctrs::array<int, 3> num_blocks_dns(4, 4, 4);
     spade::ctrs::array<int, 3> cells_in_block_dns(16, 16, 16);
     spade::ctrs::array<int, 3> exchange_cells_dns(2, 2, 2);
-    spade::grid::cartesian_grid_t grid_dns(num_blocks_dns, cells_in_block_dns, exchange_cells_dns, bounds, coords, group);
+    spade::grid::cartesian_grid_t grid_dns(num_blocks_dns, cells_in_block_dns, exchange_cells_dns, bounds, coords_dns, group);
     
     
     prim_t fill1 = 0.0;
     flux_t fill2 = 0.0;
     
-    spade::grid::grid_array prim_les(grid_les, fill1);
-    spade::grid::face_array fluxes  (grid_les, fill2);
+    spade::grid::grid_array prim_les   (grid_les, fill1);
+    spade::grid::face_array fluxes_les (grid_les, fill2);
+    spade::grid::grid_array rhs_les    (grid_dns, fill2);
     
-    spade::grid::grid_array prim_dns(grid_dns, fill1);
-    spade::grid::grid_array rhs_dns (grid_dns, fill2);
+    spade::grid::grid_array prim_dns   (grid_dns, fill1);
+    spade::grid::grid_array rhs_dns    (grid_dns, fill2);
     
     spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4);
     visc_law.prandtl = 0.72;
@@ -170,41 +161,54 @@ int main(int argc, char** argv)
     real_t time0 = 0.0;
     
     
-    
-    const real_t dx = spade::utils::min(grid.get_dx(0), grid.get_dx(1), grid.get_dx(2));
-    const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
+    spade::ctrs::array<real_t, 3> dx_comp(grid_dns.get_dx(0), grid_dns.get_dx(1), grid_dns.get_dx(2));
+    spade::ctrs::array<real_t, 3> dx_phys
+    (
+        xc.map(bounds.min(0)+dx_comp[0]) - xc.map(bounds.min(0)),
+        yc.map(bounds.min(1)+dx_comp[1]) - yc.map(bounds.min(1)),
+        zc.map(bounds.min(2)+dx_comp[2]) - zc.map(bounds.min(2))
+    );
+    const real_t dx       = spade::utils::min(dx_phys[0], dx_phys[1], dx_phys[2]);
+    const real_t umax_ini = spade::algs::transform_reduce(prim_dns, get_u, max_op);
     const real_t dt     = targ_cfl*dx/umax_ini;
     
     
-    auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
+    auto calc_rhs_dns = [&](auto& rhs, auto& q, const auto& t) -> void
     {
         rhs = 0.0;
-        grid.exchange_array(q);
+        grid_dns.exchange_array(q);
         set_channel_noslip(q);
         spade::pde_algs::flux_div(q, rhs, tscheme, visc_scheme, dscheme);
-        spade::pde_algs::source_term(rhs, [&]()->v5d{return v5d(0,0,force_term,0,0);});
-        //Wishlist
-        // rhs = 0.0;
-        // grid.begin_exchange_array(q);
-        // spade::pde_algs::flux_div(q, rhs, interior_only, tscheme, visc_scheme);
-        // grid.end_exchange_array(q);
-        // set_channel_noslip(q);
-        // spade::pde_algs::flux_div(q, rhs, boundary_only, tscheme, visc_scheme);
-        // Wall model too!
+        spade::pde_algs::source_term(q, rhs, [&]()->v5d{return v5d(0,0,force_term,0,0);});
     };
     
-    spade::time_integration::rk2 time_int(prim_dns, rhs_dns, time0, dt, calc_rhs, trans);
+    auto calc_rhs_les = [&](auto& rhs, auto& q, const auto& t) -> void
+    {
+        rhs = 0.0;
+        // interp_flux(prim_dns, fluxes_les, tscheme);
+        
+        //todo: write this as a transform() kernel
+        // calc_div(rhs, fluxes_les);
+    };
+    
+    cons_t transform_state;
+    spade::fluid_state::state_transform_t trans_les(prim_les, transform_state, air);
+    spade::fluid_state::state_transform_t trans_dns(prim_dns, transform_state, air);
+    
+    spade::time_integration::rk2 time_int_dns(prim_dns, rhs_dns, time0, dt, calc_rhs_dns, trans_dns);
+    spade::time_integration::rk2 time_int_les(prim_les, rhs_les, time0, dt, calc_rhs_les, trans_les);
+    
     
     std::ofstream myfile("hist.dat");
     for (auto nti: range(0, nt_max))
     {
         int nt = nti;
-        const real_t umax   = spade::algs::transform_reduce(prim, get_u, max_op);
+        const real_t umax   = spade::algs::transform_reduce(prim_dns, get_u, max_op);
         real_t ub, rhob;
-        calc_u_bulk(prim, air, ub, rhob);
+        calc_u_bulk(prim_dns, air, ub, rhob);
         const real_t area = bounds.size(0)*bounds.size(2);
-        auto conv2 = proto::get_domain_boundary_flux(prim, visc_scheme, 2);
-        auto conv3 = proto::get_domain_boundary_flux(prim, visc_scheme, 3);
+        auto conv2 = proto::get_domain_boundary_flux(prim_dns, visc_scheme, 2);
+        auto conv3 = proto::get_domain_boundary_flux(prim_dns, visc_scheme, 3);
         conv2 /= area;
         conv3 /= area;
         const real_t tau = 0.5*(spade::utils::abs(conv2.x_momentum()) + spade::utils::abs(conv3.x_momentum()));
@@ -222,7 +226,7 @@ int main(int argc, char** argv)
                 "tau:", spade::utils::pad_str(tau, pn),
                 "dx: ", spade::utils::pad_str(dx, pn),
                 "dt: ", spade::utils::pad_str(dt, pn),
-                "ftt:", spade::utils::pad_str(20.0*u_tau*time_int.time()/delta, pn)
+                "ftt:", spade::utils::pad_str(20.0*u_tau*time_int_dns.time()/delta, pn)
             );
             myfile << nt << " " << cfl << " " << umax << " " << ub << " " << rhob << " " << tau << " " << dx << " " << dt << std::endl;
             myfile.flush();
@@ -231,23 +235,28 @@ int main(int argc, char** argv)
         {
             if (group.isroot()) print("Output solution...");
             std::string nstr = spade::utils::zfill(nt, 8);
-            std::string filename = "prims"+nstr;
-            spade::io::output_vtk("output", filename, grid, prim);
+            std::string filename_dns = "prims_dns"+nstr;
+            std::string filename_les = "prims_les"+nstr;
+            spade::io::output_vtk("output", filename_dns, prim_dns);
+            spade::io::output_vtk("output", filename_les, prim_les);
             if (group.isroot()) print("Done.");
         }
         if (nt%checkpoint_skip == 0)
         {
             if (group.isroot()) print("Output checkpoint...");
             std::string nstr = spade::utils::zfill(nt, 8);
-            std::string filename = "check"+nstr;
-            filename = "checkpoint/"+filename+".bin";
-            spade::io::binary_write(filename, prim);
+            std::string filename_les = "check_les"+nstr;
+            filename_les = "checkpoint/"+filename_les+".bin";
+            std::string filename_dns = "check_les"+nstr;
+            filename_dns = "checkpoint/"+filename_dns+".bin";
+            spade::io::binary_write(filename_dns, prim_dns);
+            spade::io::binary_write(filename_les, prim_les);
             if (group.isroot()) print("Done.");
         }
-    	auto start = std::chrono::steady_clock::now();
-        time_int.advance();
-    	auto end = std::chrono::steady_clock::now();
-    	if (group.isroot()) print("Elapsed:", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(), "ms");
+        
+        time_int_dns.advance();
+        time_int_les.advance();
+        
         if (std::isnan(umax))
         {
             if (group.isroot())
