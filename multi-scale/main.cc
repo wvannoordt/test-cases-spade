@@ -192,11 +192,10 @@ int main(int argc, char** argv)
     };
     
     cons_t transform_state;
-    spade::fluid_state::state_transform_t trans_les(prim_les, transform_state, air);
-    spade::fluid_state::state_transform_t trans_dns(prim_dns, transform_state, air);
+    spade::fluid_state::state_transform_t trans(transform_state, air);
     
-    spade::time_integration::rk2 time_int_dns(prim_dns, rhs_dns, time0, dt, calc_rhs_dns, trans_dns);
-    spade::time_integration::rk2 time_int_les(prim_les, rhs_les, time0, dt, calc_rhs_les, trans_les);
+    spade::time_integration::rk2 time_int_dns(prim_dns, rhs_dns, time0, dt, calc_rhs_dns, trans);
+    spade::time_integration::rk2 time_int_les(prim_les, rhs_les, time0, dt, calc_rhs_les, trans);
     
     
     std::ofstream myfile("hist.dat");
