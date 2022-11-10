@@ -3,7 +3,6 @@
 #include "proto/hywall_interop.h"
 
 #include "typedef.h"
-#include "c2p.h"
 #include "calc_u_bulk.h"
 #include "calc_boundary_flux.h"
 
@@ -82,7 +81,7 @@ template <typename gas_t> struct cns_force_t
         const real_t rho = w.rho();
         output_type output;
         output.continuity() = 0.0;
-        output.energy()     = rho*source_term*q.u();
+        output.energy()     = 0.0;
         output.x_momentum() = rho*source_term;
         output.y_momentum() = 0.0;
         output.z_momentum() = 0.0;
@@ -138,6 +137,7 @@ int main(int argc, char** argv)
 	// dx, dy, dz = 0.6666666666666643E-01, 0.1562500015624990E-01, 0.5999999999999961E-01
     PTL::PropertyTree input;
     input.Read(input_filename);
+    
     std::vector<int>    nblk     = input["Grid"]["num_blocks"];
     std::vector<int>    ncell    = input["Grid"]["num_cells"];
     std::vector<int>    nexg     = input["Grid"]["num_exchg"];
@@ -160,6 +160,7 @@ int main(int argc, char** argv)
     
     real_t                eps_p  = input["Num"]["eps_p"];
     real_t                eps_T  = input["Num"]["eps_T"];
+    bool              wm_enable  = input["Num"]["wm_enable"];
     
     spade::coords::identity<real_t> coords;
     
@@ -190,8 +191,7 @@ int main(int argc, char** argv)
     spade::grid::grid_array prim (grid, fill1);
     spade::grid::grid_array rhs (grid, fill2);
     
-    //spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4);
-    spade::viscous_laws::power_law_t<real_t> visc_law(mu_ref, Twall, 0.76, prandtl);
+    spade::viscous_laws::constant_viscosity_t<real_t> visc_law(mu_ref, prandtl);
     
     spade::fluid_state::perfect_gas_t<real_t> air;
     air.R = 287.15;
@@ -201,17 +201,13 @@ int main(int argc, char** argv)
     const real_t Lz = bounds.size(2);
     auto ini = [&](const spade::ctrs::array<real_t, 3>& x) -> prim_t
     {
-        const real_t alpha = std::sqrt(1.0 - (Twall/Tref));
-        const real_t beta = 2.0*alpha*((alpha*alpha-1.0)*std::atanh(alpha) 
-            + alpha)/((alpha*alpha*alpha)*(std::log(spade::utils::abs(1.0+alpha))
-            - std::log(spade::utils::abs(1.0-alpha))));
         const real_t yh = x[1]/delta;
         prim_t output;
         output.p() = p0;
         output.T() = Tref - (Tref - Twall)*yh*yh;
-        output.u() = u0*(1.0-yh*yh)/beta;
-        output.v() = output.u()*0.1*std::sin(20.0*spade::consts::pi*x[0]/Lx);
-        output.w() = output.u()*0.1*std::sin(20.0*spade::consts::pi*x[2]/Lz);
+        output.u() = u0*(1.0-yh*yh);
+        output.v() = output.u()*0.0*std::sin(20.0*spade::consts::pi*x[0]/Lx);
+        output.w() = output.u()*0.0*std::sin(20.0*spade::consts::pi*x[2]/Lz);
         
         return output;
     };
@@ -265,10 +261,13 @@ int main(int argc, char** argv)
     
     spade::proto::hywall_binding_t wall_model(prim, rhs, air);
     wall_model.read(input["WallModel"]);
-    for (auto& b: boundary) b = !b;
-    wall_model.init(prim, boundary);
-    for (auto& b: boundary) b = !b;
-    wall_model.set_dt(dt);
+    if (wm_enable)
+    {
+        for (auto& b: boundary) b = !b;
+        wall_model.init(prim, boundary);
+        for (auto& b: boundary) b = !b;
+        wall_model.set_dt(dt);
+    }
     spade::utils::mtimer_t tmr("exchg", "bc", "fdiv", "wm", "source", "advance");
     auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
     {
@@ -283,21 +282,31 @@ int main(int argc, char** argv)
         
         tmr.start("fdiv");
         spade::pde_algs::flux_div(q, rhs, tscheme, dscheme);
-        // spade::pde_algs::flux_div(q, rhs, tscheme, visc_scheme);
-        
-        auto policy = spade::pde_algs::block_flux_all;
-        spade::pde_algs::flux_div(q, rhs, policy, boundary, visc_scheme);
+        if (!wm_enable)
+        {
+            spade::pde_algs::flux_div(q, rhs, visc_scheme);
+        }
+        else
+        {
+            auto policy = spade::pde_algs::block_flux_all;
+            spade::pde_algs::flux_div(q, rhs, policy, boundary, visc_scheme);
+        }
         tmr.stop("fdiv");
         
         tmr.start("wm");
-        wall_model.sample(q, visc_law);
-        wall_model.solve();
-        wall_model.apply_flux(rhs);
+        if (wm_enable)
+        {
+            wall_model.sample(q, visc_law);
+            wall_model.solve();
+            wall_model.apply_flux(rhs);
+        }
         tmr.stop("wm");
         
         tmr.start("source");
         spade::pde_algs::source_term(q, rhs, source);
         tmr.stop("source");
+        
+        
     };
     
     spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);

@@ -1,9 +1,9 @@
 Grid
 {
-    num_blocks = [16, 4, 3]
-    num_cells  = [32, 32, 32]
+    num_blocks = [6, 4, 2]
+    num_cells  = [32, 32, 36]
     num_exchg  = [2, 2, 2]
-    dims       = [0.0, 12.0, -1.0, 1.0, 0.0, 5.0]
+    dims       = [0.0, 12.8, -1.0, 1.0, 0.0, 4.2]
 }
 Time
 {
@@ -11,23 +11,24 @@ Time
     nt_max        = 140000
     nt_skip       = 100000
     ck_skip       = 1000
-    output_timing = true
+    output_timing = false
 }
 Fluid
 {
-    Twall      = 100.0
-    Tref       = 700.0
-    mu_ref     = 3.0e-4
-    u0         = 1202.697
-    p0         = 570.233265072
+    Twall      = 300.0
+    Tref       = 300.0
+    mu_ref     = 6.5327e-4
+    u0         = 69.4377
+    p0         = 101325.0
     prandtl    = 0.72
-    wall_shear = 20.75
-    rho_b      = 0.498742216e-02
+    wall_shear = 9.815
+    rho_b      = 1.176
 }
 Num
 {
-    eps_p      = 0.25
-    eps_T      = 0.25
+    eps_p      = 0.025
+    eps_T      = 0.025
+    wm_enable  = true
 }
 WallModel
 {
@@ -38,7 +39,7 @@ WallModel
     fluidPrandtl                 = 0.72 // Laminar Prandtl
     gasConstant                  = 287.000000 // Gas constant
     includeMomentumRhs           = false // Include the parameterized convection term
-    isCompressible               = true // Use variable density
+    isCompressible               = false // Use variable density
     maxIterations                = 100 // Max. iterations
     momentumEquationType         = ODE // Momentum equation type
     momentumUnderRelaxationODE   = 0.200000 // Relaxation factor for momentum ODE
@@ -50,10 +51,10 @@ WallModel
     variablePrandtlT             = false // Variable turbulent prandtl number
     verboseLevel                 = 0 // debug output level
     wallSpacing                  = 1e-6 // Max. iterations
-    wallTemperature              = 100.0 // Wall Temperature
+    wallTemperature              = 300.0 // Wall Temperature
     suthViscRef                  = 3e-4 // Reference viscosity for viscosity power law
     suthTRef                     = 100.0 // Reference temperature for viscosity power law
-    viscousLaw                   = PowerLaw // Viscous law
+    viscousLaw                   = constant // Viscous law
     adiabaticWall                = false // Adiabatic wall
     yScale                       = trettelLarsson // y-coordinate scaling
 }
