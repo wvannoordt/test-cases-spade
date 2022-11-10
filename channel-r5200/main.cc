@@ -250,7 +250,7 @@ int main(int argc, char** argv)
     
     
     cons_t transform_state;
-    spade::fluid_state::state_transform_t trans(prim, transform_state, air);
+    spade::fluid_state::state_transform_t trans(transform_state, air);
     
     const real_t force_term = wall_shear/(delta*rho_b);
     cns_force_t source(force_term, air);
