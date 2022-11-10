@@ -5,7 +5,9 @@ ifndef MPI_ENABLE
 MPI_ENABLE := 1
 endif
 
+ifeq (${g10},1)
 export OMPI_CXX=g++-10
+endif
 ifeq (${MPI_ENABLE},1)
 cc := $(shell which mpicxx)
 else
