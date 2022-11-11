@@ -12,7 +12,6 @@ typedef spade::fluid_state::prim_t<real_t> prim_t;
 typedef spade::fluid_state::flux_t<real_t> flux_t;
 typedef spade::fluid_state::cons_t<real_t> cons_t;
 
-#include "calc_u_bulk.h"
 #include "calc_boundary_flux.h"
 
 void set_channel_noslip(auto& prims)
@@ -87,16 +86,18 @@ int main(int argc, char** argv)
     std::filesystem::path out_path("checkpoint");
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
     
+    spade::ctrs::array<int, 3> num_blocks(8, 8, 8);
     
-    spade::ctrs::array<int, 3> num_blocks_les(4, 4, 4);
-    spade::ctrs::array<int, 3> cells_in_block_les(16, 16, 16);
-    spade::ctrs::array<int, 3> exchange_cells_les(2, 2, 2);
-    spade::grid::cartesian_grid_t grid_les(num_blocks_les, cells_in_block_les, exchange_cells_les, bounds, coords_les, group);
+    spade::ctrs::array<int, 3> num_blocks_les = num_blocks;
+    spade::ctrs::array<int, 3> cells_in_block_les(2, 2, 2);
+    spade::ctrs::array<int, 3> exchange_cells_les(1, 1, 1);
     
     
-    spade::ctrs::array<int, 3> num_blocks_dns(4, 4, 4);
-    spade::ctrs::array<int, 3> cells_in_block_dns(16, 16, 16);
+    spade::ctrs::array<int, 3> num_blocks_dns = num_blocks;
+    spade::ctrs::array<int, 3> cells_in_block_dns(48, 48, 48);
     spade::ctrs::array<int, 3> exchange_cells_dns(2, 2, 2);
+    
+    spade::grid::cartesian_grid_t grid_les(num_blocks_les, cells_in_block_les, exchange_cells_les, bounds, coords_les, group);
     spade::grid::cartesian_grid_t grid_dns(num_blocks_dns, cells_in_block_dns, exchange_cells_dns, bounds, coords_dns, group);
     
     
@@ -110,12 +111,9 @@ int main(int argc, char** argv)
     spade::grid::grid_array prim_dns   (grid_dns, fill1);
     spade::grid::grid_array rhs_dns    (grid_dns, fill2);
     
-    spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4);
-    visc_law.prandtl = 0.72;
+    spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4, 0.72);
     
-    spade::fluid_state::perfect_gas_t<real_t> air;
-    air.R = 287.15;
-    air.gamma = 1.4;
+    spade::fluid_state::ideal_gas_t<real_t> air(1.4, 287.15);
     
     const real_t p0 = 30.0;
     const real_t t0 = 0.1;
@@ -148,9 +146,9 @@ int main(int argc, char** argv)
     
     struct get_u_t
     {
-        const spade::fluid_state::perfect_gas_t<real_t>* gas;
+        const spade::fluid_state::ideal_gas_t<real_t>* gas;
         typedef prim_t arg_type;
-        get_u_t(const spade::fluid_state::perfect_gas_t<real_t>& gas_in) {gas = &gas_in;}
+        get_u_t(const spade::fluid_state::ideal_gas_t<real_t>& gas_in) {gas = &gas_in;}
         real_t operator () (const prim_t& q) const
         {
             return sqrt(gas->gamma*gas->R*q.T()) + sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w());
@@ -203,8 +201,6 @@ int main(int argc, char** argv)
     {
         int nt = nti;
         const real_t umax   = spade::algs::transform_reduce(prim_dns, get_u, max_op);
-        real_t ub, rhob;
-        calc_u_bulk(prim_dns, air, ub, rhob);
         const real_t area = bounds.size(0)*bounds.size(2);
         auto conv2 = proto::get_domain_boundary_flux(prim_dns, visc_scheme, 2);
         auto conv3 = proto::get_domain_boundary_flux(prim_dns, visc_scheme, 3);
@@ -220,14 +216,12 @@ int main(int argc, char** argv)
                 "nt: ", spade::utils::pad_str(nt, pn),
                 "cfl:", spade::utils::pad_str(cfl, pn),
                 "u+a:", spade::utils::pad_str(umax, pn),
-                "ub: ", spade::utils::pad_str(ub, pn),
-                "rb: ", spade::utils::pad_str(rhob, pn),
                 "tau:", spade::utils::pad_str(tau, pn),
                 "dx: ", spade::utils::pad_str(dx, pn),
                 "dt: ", spade::utils::pad_str(dt, pn),
                 "ftt:", spade::utils::pad_str(20.0*u_tau*time_int_dns.time()/delta, pn)
             );
-            myfile << nt << " " << cfl << " " << umax << " " << ub << " " << rhob << " " << tau << " " << dx << " " << dt << std::endl;
+            myfile << nt << " " << cfl << " " << umax << tau << " " << dx << " " << dt << std::endl;
             myfile.flush();
         }
         if (nt%nt_skip == 0)
