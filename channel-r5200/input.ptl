@@ -26,8 +26,8 @@ Fluid
 }
 Num
 {
-    eps_p      = 0.025
-    eps_T      = 0.025
+    eps_p      = 0.25
+    eps_T      = 0.25
     wm_enable  = true
 }
 WallModel
