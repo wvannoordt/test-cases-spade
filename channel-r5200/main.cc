@@ -206,8 +206,8 @@ int main(int argc, char** argv)
         output.p() = p0;
         output.T() = Tref - (Tref - Twall)*yh*yh;
         output.u() = u0*(1.0-yh*yh);
-        output.v() = output.u()*0.0*std::sin(20.0*spade::consts::pi*x[0]/Lx);
-        output.w() = output.u()*0.0*std::sin(20.0*spade::consts::pi*x[2]/Lz);
+        output.v() = output.u()*0.1*std::sin(20.0*spade::consts::pi*x[0]/Lx);
+        output.w() = output.u()*0.1*std::sin(20.0*spade::consts::pi*x[2]/Lz);
         
         return output;
     };
