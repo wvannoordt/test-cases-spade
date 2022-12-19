@@ -26,11 +26,12 @@ void set_channel_slip(auto& prims)
             const auto& idomain = grid.is_domain_boundary(lb_glob);
             if (idomain(dir/2, dir%2))
             {
-                const auto lb_idx = spade::ctrs::expand_index(lb_glob, grid.get_num_blocks());
                 const auto nvec_out = v3i(0,2*idc-1,0);
-                const spade::grid::cell_t<int> j = idc*(grid.get_num_cells(1)-1);
-                auto r1 = range(-grid.get_num_exchange(0), grid.get_num_cells(0) + grid.get_num_exchange(0));
-                auto r2 = range(-grid.get_num_exchange(2), grid.get_num_cells(2) + grid.get_num_exchange(2));
+                spade::bound_box_t<int, grid.dim()> bnd;
+                for (int dd = 0; dd < grid.dim(); ++dd)
+                {
+                    bnd.min();
+                }
                 for (auto ii: r1*r2)
                 {
                     for (int nnn = 0; nnn < 2; ++nnn)

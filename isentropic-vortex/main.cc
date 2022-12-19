@@ -1,7 +1,6 @@
 #include <chrono>
 #include "spade.h"
-#include "c2p.h"
-#include "preconditioner.h"
+#include "typedef.h"
 #include "PTL.h"
 
 int main(int argc, char** argv)
@@ -52,7 +51,7 @@ int main(int argc, char** argv)
     const real_t cp               = input["Fluid"]["cp"];
     const real_t theta_d          = input["Fluid"]["theta_d"];
     
-    spade::fluid_state::perfect_gas_t<real_t> air;
+    spade::fluid_state::ideal_gas_t<real_t> air;
     air.gamma = gamma;
     air.R = (1.0-(1.0/gamma))*cp;
     
@@ -122,9 +121,9 @@ int main(int argc, char** argv)
     
     struct get_u_t
     {
-        const spade::fluid_state::perfect_gas_t<real_t>* gas;
+        const spade::fluid_state::ideal_gas_t<real_t>* gas;
         typedef prim_t arg_type;
-        get_u_t(const spade::fluid_state::perfect_gas_t<real_t>& gas_in) {gas = &gas_in;}
+        get_u_t(const spade::fluid_state::ideal_gas_t<real_t>& gas_in) {gas = &gas_in;}
         real_t operator () (const prim_t& q) const
         {
             return sqrt(gas->gamma*gas->R*q.T()) + sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w());
@@ -142,7 +141,7 @@ int main(int argc, char** argv)
     const real_t dt     = targ_cfl*dx/umax_ini;
     
     cons_t transform_state;
-    spade::fluid_state::state_transform_t trans(prim, transform_state, air);
+    spade::fluid_state::state_transform_t trans(transform_state, air);
     
     auto block_policy = spade::pde_algs::block_flux_all;
     spade::bound_box_t<bool,grid.dim()> boundary_flux(true);
@@ -170,9 +169,9 @@ int main(int argc, char** argv)
         return output;
     };
     
-    preconditioner_t preconditioner(air, prim, beta);
+    // preconditioner_t preconditioner(air, prim, beta);
     
-    spade::algs::iterative_control convergence_crit(rhs, error_norm, error_tol, max_its);
+    // spade::algs::iterative_control convergence_crit(rhs, error_norm, error_tol, max_its);
     // spade::time_integration::dual_time_t time_int(prim, rhs, time0, dt, dt*(inner_cfl/targ_cfl), calc_rhs, convergence_crit, bdf_order, trans, preconditioner);
     
     spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
