@@ -202,13 +202,17 @@ int main(int argc, char** argv)
     const real_t Lz = bounds.size(2);
     auto ini = [&](const spade::ctrs::array<real_t, 3>& x) -> prim_t
     {
+        const real_t pi = spade::consts::pi;
+        const real_t du = 0.2*u0;
+        const real_t pe = du*std::cos(pi*x[2])*(std::sin(2.0*pi*x[0])*std::sin(4.0*pi*x[1]) + std::sin(4.0*pi*x[0])*std::sin(8.0*pi*x[1]));
+        const real_t po = du*std::cos(pi*x[2])*(std::sin(2.0*pi*x[0])*std::cos(4.0*pi*x[1]) + std::sin(4.0*pi*x[0])*std::cos(8.0*pi*x[1]));
         const real_t yh = x[1]/delta;
         prim_t output;
         output.p() = p0;
         output.T() = Tref - (Tref - Twall)*yh*yh;
-        output.u() = u0*(1.0-yh*yh);
-        output.v() = output.u()*0.0*std::sin(20.0*spade::consts::pi*x[0]/Lx);
-        output.w() = output.u()*0.0*std::sin(20.0*spade::consts::pi*x[2]/Lz);
+        output.u() = (3.0/2.0)*u0*(1.0-yh*yh) + pe;
+        output.v() = po;
+        output.w() = po;
         
         return output;
     };
