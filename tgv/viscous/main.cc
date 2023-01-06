@@ -2,6 +2,8 @@
 #include <spade.h>
 #include <PTL.h>
 
+#include "deprecated/time_integration.h"
+
 #include "typedef.h"
 
 int main(int argc, char** argv)
@@ -60,7 +62,7 @@ int main(int argc, char** argv)
     
     const real_t targ_cfl         = 0.2;
     const int    nt_max           = 150000;
-    const int    nt_skip          = 1000;
+    const int    nt_skip          = 100;
     const int    checkpoint_skip  = 1000;
     const int    nx               = 32;
     const int    ny               = 32;
@@ -146,7 +148,6 @@ int main(int argc, char** argv)
     //fill the initial condition
     spade::algs::fill_array(prim, ini);
     
-    /*
     //fill the guards
     grid.exchange_array(prim);
     
@@ -209,13 +210,17 @@ int main(int argc, char** argv)
     {
         rhs_in = 0.0;
         grid.exchange_array(q);
-        
         //compute the convective terms
         spade::pde_algs::flux_div(q, rhs_in, tscheme, vscheme);
     };
     
     //define the time integrator
-    spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
+    // spade::deprecated::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
+    spade::time_integration::time_axis_t axis(time0, dt);
+    spade::time_integration::rk4_t alg;
+    spade::time_integration::integrator_data_t q(prim, rhs, alg);
+    spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, trans);
+    
     
     spade::utils::mtimer_t tmr("advance");
     
@@ -223,7 +228,7 @@ int main(int argc, char** argv)
     for (auto nt: range(0, nt_max+1))
     {
         //cacluate the maximum wavespeed |u|+a
-        const real_t umax   = spade::algs::transform_reduce(prim, get_u, max_op);        
+        const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_u, max_op);        
         
         //print some nice things to the screen
         if (group.isroot())
@@ -245,7 +250,7 @@ int main(int argc, char** argv)
             if (group.isroot()) print("Output solution...");
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "prims"+nstr;
-            if (do_output) spade::io::output_vtk("output", filename, prim);
+            if (do_output) spade::io::output_vtk("output", filename, time_int.solution());
             std::string filename_rhs = "rhs"+nstr;
             if (output_rhs) spade::io::output_vtk("output", filename_rhs, rhs);
             if (group.isroot()) print("Done.");
@@ -258,7 +263,7 @@ int main(int argc, char** argv)
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "check"+nstr;
             filename = "checkpoint/"+filename+".bin";
-            if (do_output) spade::io::binary_write(filename, prim);
+            if (do_output) spade::io::binary_write(filename, time_int.solution());
             if (group.isroot()) print("Done.");
         }
         
@@ -280,6 +285,5 @@ int main(int argc, char** argv)
             return 155;
         }
     }
-    */
     return 0;
 }
