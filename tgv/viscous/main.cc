@@ -60,7 +60,7 @@ int main(int argc, char** argv)
     
     const real_t targ_cfl         = 0.2;
     const int    nt_max           = 150000;
-    const int    nt_skip          = 1000;
+    const int    nt_skip          = 500;
     const int    checkpoint_skip  = 1000;
     const int    nx               = 32;
     const int    ny               = 32;
@@ -146,7 +146,6 @@ int main(int argc, char** argv)
     //fill the initial condition
     spade::algs::fill_array(prim, ini);
     
-    /*
     //fill the guards
     grid.exchange_array(prim);
     
@@ -280,6 +279,6 @@ int main(int argc, char** argv)
             return 155;
         }
     }
-    */
+    
     return 0;
 }
