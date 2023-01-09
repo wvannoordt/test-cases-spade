@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <string>
+#include <sstream>
 
 // this is garbage
 namespace local
@@ -18,11 +19,11 @@ namespace local
     {
         std::vector<std::string> raw_args;
         std::string input_filename;
-        std::string init_filename;
+        int init_num;
         bool init_from_file;
         io_control_t(int argc, char** argv)
         {
-            init_filename = "";
+            init_num = -1;
             init_from_file = false;
             for (int i = 0; i < argc; ++i)
             {
@@ -38,12 +39,19 @@ namespace local
             if (args.has_arg("-init"))
             {
                 init_from_file = true;
-                init_filename = args["-init"];
+                std::string init_num_str = args["-init"];
+                std::istringstream iss(init_num_str);
+                iss >> init_num;
+                if (iss.fail())
+                {
+                    print("BAD INIT INTEGER");
+                    exit(1);
+                }
             }
-            create_dirs();
         }
         
         bool is_init() const {return init_from_file;}
+        int get_init_num() const {return init_num;}
         
         std::string get_input_file_name() const {return input_filename;}
         

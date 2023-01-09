@@ -14,6 +14,8 @@ typedef spade::fluid_state::cons_t<real_t> cons_t;
 #include "calc_boundary_flux.h"
 
 #include "io_control.h"
+#include "filter_array.h"
+#include "filter_flux.h"
 
 void set_channel_noslip(auto& prims)
 {
@@ -80,6 +82,7 @@ int main(int argc, char** argv)
     spade::parallel::mpi_t group(&argc, &argv);
     
     local::io_control_t control(argc, argv);
+    control.create_dirs();
     PTL::PropertyTree input;
     input.Read(control.get_input_file_name());
     
@@ -97,10 +100,10 @@ int main(int argc, char** argv)
     
     const int nexch    = input["Config"]["nexch"];
     
-    const real_t cfl_in       = input["Config"]["cfl"];
-    const int nt_max          = input["Config"]["nt_max"];
-    const int nt_skip         = input["Config"]["nt_skip"];
-    const int checkpoint_skip = input["Config"]["ck_skip"];
+    const real_t cfl_in  = input["Config"]["cfl"];
+    const int nt_max     = input["Config"]["nt_max"];
+    const int nt_skip    = input["Config"]["nt_skip"];
+    const int ck_skip    = input["Config"]["ck_skip"];
     
     const real_t targ_cfl = cfl_in;
     
@@ -194,6 +197,16 @@ int main(int argc, char** argv)
     };
     
     spade::algs::fill_array(prim_dns, ini);
+    local::filter_array(prim_dns, prim_les);
+    
+    if (control.is_init())
+    {
+        const std::string filename0 = control.ck_file_name(0, control.get_init_num());
+        const std::string filename1 = control.ck_file_name(1, control.get_init_num());
+        if (group.isroot()) print("Reading from", filename0, "and", filename1);
+        spade::io::binary_read(filename0, prim_dns);
+        spade::io::binary_read(filename1, prim_les);
+    }
 
 
     spade::convective::pressure_diss_lr dscheme(air, 0.025, 0.025);
@@ -267,6 +280,22 @@ int main(int argc, char** argv)
         conv2 /= area;
         conv3 /= area;
         const real_t tau = 0.5*(spade::utils::abs(conv2.x_momentum()) + spade::utils::abs(conv3.x_momentum()));
+        
+        if (nt%nt_skip == 0)
+        {
+            if (group.isroot()) print("Output solutions...");
+            spade::io::output_vtk(control.sl_dir_name(0), control.sl_file_name(nt), dns_solution);
+            spade::io::output_vtk(control.sl_dir_name(1), control.sl_file_name(nt), les_solution);
+        }
+        
+        if (nt%ck_skip == 0)
+        {
+            const std::string ck_fn_0 = control.ck_file_name(0, nt);
+            const std::string ck_fn_1 = control.ck_file_name(1, nt);
+            if (group.isroot()) print("Output checkpoints", ck_fn_0, "and", ck_fn_1);
+            spade::io::binary_write(ck_fn_0, dns_solution);
+            spade::io::binary_write(ck_fn_1, les_solution);
+        }
         
         if (group.isroot())
         {

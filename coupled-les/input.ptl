@@ -6,9 +6,9 @@ Config
     cells_x = 48
     cells_y = 48
     cells_z = 48
-    fsize_x = 16
-    fsize_y = 16
-    fsize_z = 16
+    fsize_x = 4
+    fsize_y = 4
+    fsize_z = 4
     nexch   = 2
     cfl     = 0.5
     nt_max  = 1000000
