@@ -122,17 +122,9 @@ int main(int argc, char** argv)
     bounds.min(2) =  0.0;
     bounds.max(2) =  2*spade::consts::pi*delta;
     
-    
-    
     spade::coords::identity<real_t> coords;
-    
-    std::filesystem::path out_path("checkpoint");
-    if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
-    
-    
     spade::grid::cartesian_grid_t grid_dns(num_blocks, cells_in_block_dns, exchange_cells, bounds, coords, group);
     spade::grid::cartesian_grid_t grid_les(num_blocks, cells_in_block_les, exchange_cells, bounds, coords, group);
-    
     
     prim_t fill1 = 0.0;
     flux_t fill2 = 0.0;
@@ -250,6 +242,8 @@ int main(int argc, char** argv)
             rhs_new[2] += force_term;
             return rhs_new;
         });
+        
+        local::filter_array(rhs_in_dns, rhs_in_les);
     };
     
     cons_t transform_state;
@@ -261,6 +255,7 @@ int main(int argc, char** argv)
     spade::time_integration::ssprk34_t alg;
     spade::ctrs::arith_tuple prim(prim_dns, prim_les);
     spade::ctrs::arith_tuple rhs (rhs_dns,  rhs_les);
+    
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
     spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, trans_vec);
 
