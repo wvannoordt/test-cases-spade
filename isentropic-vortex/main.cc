@@ -78,7 +78,7 @@ int main(int argc, char** argv)
     
     prim_t fill1 = 0.0;
     flux_t fill2 = 0.0;
-    
+
     spade::grid::grid_array prim (grid, fill1);
     spade::grid::grid_array rhs  (grid, fill2);
     
@@ -134,8 +134,6 @@ int main(int argc, char** argv)
     spade::reduce_ops::reduce_max<real_t> sum_op;
     real_t time0 = 0.0;
     
-    
-    
     const real_t dx = spade::utils::min(grid.get_dx(0), grid.get_dx(1), grid.get_dx(2));
     const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
     const real_t dt     = targ_cfl*dx/umax_ini;
@@ -145,42 +143,26 @@ int main(int argc, char** argv)
     
     auto block_policy = spade::pde_algs::block_flux_all;
     spade::bound_box_t<bool,grid.dim()> boundary_flux(true);
-    auto calc_rhs = [&](auto& rhs, auto& q, const auto& t) -> void
+    auto calc_rhs = [&](auto& resid, auto& sol, const auto& t) -> void
     {
-        rhs = 0.0;
-        grid.exchange_array(q);
-        spade::pde_algs::flux_div(q, rhs, block_policy, boundary_flux, tscheme);
+        resid = 0.0;
+        grid.exchange_array(sol);
+        spade::pde_algs::flux_div(sol, resid, block_policy, boundary_flux, tscheme);
     };
-    
-    
-    int max_its = 5000000;
-    spade::static_math::int_const_t<2> bdf_order;
-    const int ndof = grid.grid_size();
-    auto error_norm = [&](const auto& r) -> real_t
-    {
-        auto output = spade::algs::transform_reduce(
-            r, 
-            [](const flux_t& f) -> real_t 
-            {
-                return f[0]*f[0] + f[1]*f[1] + f[2]*f[2] + f[3]*f[3] + f[4]*f[4];
-            },
-            max_op);
-        if (group.isroot()) print("Residual:", output);
-        return output;
-    };
-    
-    // preconditioner_t preconditioner(air, prim, beta);
     
     // spade::algs::iterative_control convergence_crit(rhs, error_norm, error_tol, max_its);
     // spade::time_integration::dual_time_t time_int(prim, rhs, time0, dt, dt*(inner_cfl/targ_cfl), calc_rhs, convergence_crit, bdf_order, trans, preconditioner);
     
-    spade::time_integration::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
+    spade::time_integration::time_axis_t axis(time0, dt);
+    spade::time_integration::ssprk34_t alg;
+    spade::time_integration::integrator_data_t q(prim, rhs, alg);
+    spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, trans);
     
     spade::utils::mtimer_t tmr("advance");
     std::ofstream myfile("hist.dat");
     for (auto nt: range(0, nt_max+1))
     {
-        const real_t umax   = spade::algs::transform_reduce(prim, get_u, max_op);        
+        const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_u, max_op);        
         if (group.isroot())
         {
             const real_t cfl = umax*dt/dx;
@@ -200,7 +182,7 @@ int main(int argc, char** argv)
             if (group.isroot()) print("Output solution...");
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "prims"+nstr;
-            if (do_output) spade::io::output_vtk("output", filename, prim);
+            if (do_output) spade::io::output_vtk("output", filename, time_int.solution());
             if (group.isroot()) print("Done.");
         }
         if (nt%checkpoint_skip == 0)
@@ -209,7 +191,7 @@ int main(int argc, char** argv)
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "check"+nstr;
             filename = "checkpoint/"+filename+".bin";
-            if (do_output) spade::io::binary_write(filename, prim);
+            if (do_output) spade::io::binary_write(filename, time_int.solution());
             if (group.isroot()) print("Done.");
         }
         
