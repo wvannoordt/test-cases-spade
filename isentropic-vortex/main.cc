@@ -150,9 +150,6 @@ int main(int argc, char** argv)
         spade::pde_algs::flux_div(sol, resid, block_policy, boundary_flux, tscheme);
     };
     
-    // spade::algs::iterative_control convergence_crit(rhs, error_norm, error_tol, max_its);
-    // spade::time_integration::dual_time_t time_int(prim, rhs, time0, dt, dt*(inner_cfl/targ_cfl), calc_rhs, convergence_crit, bdf_order, trans, preconditioner);
-    
     spade::time_integration::time_axis_t axis(time0, dt);
     spade::time_integration::ssprk34_t alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
