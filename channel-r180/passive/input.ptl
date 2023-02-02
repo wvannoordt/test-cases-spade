@@ -21,6 +21,8 @@ Time
 {
     targ_cfl = 0.8
     nt_max   = 15000001
-    nt_skip  = 500
-    ck_skip  = 500
+    nt_skip  = 15000002
+    ck_skip  = 2500
+    do_ini   = true
+    ini_num  = 0
 }

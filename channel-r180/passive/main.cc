@@ -1,17 +1,10 @@
-#include <chrono>
 #include "spade.h"
 #include "PTL.h"
-
-typedef double real_t;
-typedef spade::ctrs::array<real_t, 3> v3d;
-typedef spade::ctrs::array<int,    3> v3i;
-typedef spade::ctrs::array<int,    4> v4i;
-typedef spade::fluid_state::prim_t<real_t> prim_t;
-typedef spade::fluid_state::flux_t<real_t> flux_t;
-typedef spade::fluid_state::cons_t<real_t> cons_t;
-
+#include "typedef.h"
 #include "calc_u_bulk.h"
 #include "calc_boundary_flux.h"
+#include "phi_trans.h"
+#include "phi_rhs.h"
 
 void set_channel_noslip(auto& prims)
 {
@@ -94,21 +87,6 @@ int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
     
-    bool init_from_file = false;
-    std::string init_filename = "";
-    spade::cli_args::shortname_args_t args(argc, argv);
-    if (args.has_arg("-init"))
-    {
-        init_filename = args["-init"];
-        if (group.isroot()) print("Initialize from", init_filename);
-        init_from_file = true;
-        if (!std::filesystem::exists(init_filename))
-        {
-            if (group.isroot()) print("Cannot find ini file", init_filename);
-            abort();
-        }
-    }
-    
     PTL::PropertyTree input;
     input.Read("input.ptl");
     
@@ -131,6 +109,8 @@ int main(int argc, char** argv)
     const int    nt_max      = input["Time"]["nt_max"];
     const int    nt_skip     = input["Time"]["nt_skip"];
     const int    ck_skip     = input["Time"]["ck_skip"];
+    const bool   do_ini      = input["Time"]["do_ini"];
+    const int    ini_num     = input["Time"]["ini_num"];
     
     spade::ctrs::array<int, 3> num_blocks    (blocks_x,   blocks_y,   blocks_z);
     spade::ctrs::array<int, 3> cells_in_block(cells_x,    cells_y,    cells_z);
@@ -224,16 +204,33 @@ int main(int argc, char** argv)
         return output;
     };
     
-    spade::algs::fill_array(prim, ini);
-    spade::algs::fill_array(phi,  []()->real_t {return 0.0;});
-    
-    if (init_from_file)
+    spade::algs::fill_array(prim,  ini);
+    spade::algs::fill_array(phi_q, [&](const spade::ctrs::array<real_t, 3>& x)->real_t
     {
-        if (group.isroot()) print("reading...");
-        spade::io::binary_read(init_filename, prim);
+        return std::sin(x[0])*std::sin(x[0])*(1.0-x[1]*x[1]/(delta*delta));
+    });
+    
+    int nt_min = 0;
+    if (do_ini)
+    {
+        std::string ini_n_str = spade::utils::zfill(ini_num, 8);
+        std::string ini_q_cns = spade::utils::strformat("{}/q_cns_{}.bin", std::string(out_path), ini_n_str);
+        std::string ini_q_phi = spade::utils::strformat("{}/q_phi_{}.bin", std::string(out_path), ini_n_str);
+        
+        if (group.isroot()) print("Reading:", ini_q_cns);
+        spade::io::binary_read(ini_q_cns, prim);
+        
+        if (group.isroot()) print("Reading:", ini_q_phi);
+        spade::io::binary_read(ini_q_phi, phi_q);
         if (group.isroot()) print("Init done.");
+
         grid.exchange_array(prim);
+        grid.exchange_array(phi_q);
+        
         set_channel_noslip(prim);
+        set_zero_wall(phi_q);
+        
+        nt_min = ini_num;
     }
 
 
@@ -280,8 +277,8 @@ int main(int argc, char** argv)
         set_zero_wall(q_phi_in);
         
         //CNS
-        spade::pde_algs::flux_div(q_in, rhs_in, tscheme, visc_scheme);
-        spade::pde_algs::source_term(q_in, rhs_in, [&]() -> spade::ctrs::array<real_t, 5> 
+        spade::pde_algs::flux_div(q_prm_in, rhs_prm_in, tscheme, visc_scheme);
+        spade::pde_algs::source_term(q_prm_in, rhs_prm_in, [&]() -> spade::ctrs::array<real_t, 5> 
         {
             spade::ctrs::array<real_t, 5> srctrm = 0.0;
             srctrm[2] += force_term;
@@ -289,27 +286,34 @@ int main(int argc, char** argv)
         });
         
         //Scalar
-        
+        local::phi_rhs(rhs_phi_in, q_phi_in, q_prm_in, visc_law.get_visc()/pr_phi, air.R, phi_tau);
     };
     
     cons_t transform_state;
-    spade::fluid_state::state_transform_t trans(transform_state, air);
+    spade::fluid_state::state_transform_t cns_trans(transform_state, air);
+    local::phi_trans_t trans(cns_trans);
+    
+    spade::ctrs::arith_tuple prim_v(prim, phi_q);
+    spade::ctrs::arith_tuple rhs_v (rhs,  phi_r);
     
     spade::time_integration::time_axis_t axis(time0, dt);
     spade::time_integration::ssprk34_t alg;
-    spade::time_integration::integrator_data_t q(prim, rhs, alg);
+    spade::time_integration::integrator_data_t q(prim_v, rhs_v, alg);
     spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, trans);
     
     std::ofstream myfile("hist.dat");
-    for (auto nti: range(0, nt_max))
+    for (auto nti: range(nt_min, nt_max+nt_min))
     {
         int nt = nti;
-        const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_u, max_op);
+        const auto& sol = time_int.solution();
+        const auto& q_cns = sol[0_c];
+        const auto& q_phi = sol[1_c];
+        const real_t umax = spade::algs::transform_reduce(q_cns, get_u, max_op);
         real_t ub, rhob;
-        calc_u_bulk(time_int.solution(), air, ub, rhob);
+        calc_u_bulk(q_cns, air, ub, rhob);
         const real_t area = bounds.size(0)*bounds.size(2);
-        auto conv2 = proto::get_domain_boundary_flux(time_int.solution(), visc_scheme, 2);
-        auto conv3 = proto::get_domain_boundary_flux(time_int.solution(), visc_scheme, 3);
+        auto conv2 = proto::get_domain_boundary_flux(q_cns, visc_scheme, 2);
+        auto conv3 = proto::get_domain_boundary_flux(q_cns, visc_scheme, 3);
         conv2 /= area;
         conv3 /= area;
         const real_t tau = 0.5*(spade::utils::abs(conv2.x_momentum()) + spade::utils::abs(conv3.x_momentum()));
@@ -334,10 +338,14 @@ int main(int argc, char** argv)
         }
         if (nt%nt_skip == 0)
         {
-            if (group.isroot()) print("Output solution...");
             std::string nstr = spade::utils::zfill(nt, 8);
-            std::string filename = "prims"+nstr;
-            spade::io::output_vtk("output", filename, grid, time_int.solution());
+            
+            if (group.isroot()) print("Output solution 1 of 2");
+            spade::io::output_vtk("output", spade::utils::strformat("cns_{}", nstr), grid, q_cns);
+            
+            if (group.isroot()) print("Output solution 2 of 2");
+            spade::io::output_vtk("output", spade::utils::strformat("phi_{}", nstr), grid, q_phi);
+            
             if (group.isroot()) print("Done.");
         }
         if (nt%ck_skip == 0)
@@ -346,13 +354,10 @@ int main(int argc, char** argv)
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "check"+nstr;
             filename = "checkpoint/"+filename+".bin";
-            spade::io::binary_write(filename, time_int.solution());
+            spade::io::binary_write(filename, q_cns);
             if (group.isroot()) print("Done.");
         }
-    	auto start = std::chrono::steady_clock::now();
         time_int.advance();
-    	auto end = std::chrono::steady_clock::now();
-    	if (group.isroot()) print("Elapsed:", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count(), "ms");
         if (std::isnan(umax))
         {
             if (group.isroot())
