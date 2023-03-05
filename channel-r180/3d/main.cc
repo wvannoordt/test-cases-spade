@@ -124,11 +124,12 @@ int main(int argc, char** argv)
     spade::grid::cell_array prim (grid, fill1);
     spade::grid::cell_array rhs (grid, fill2);
     
-    spade::viscous_laws::constant_viscosity_t<real_t> visc_law(1.85e-4, 0.72);
     
     spade::fluid_state::ideal_gas_t<real_t> air;
     air.R = 287.15;
     air.gamma = 1.4;
+    
+    spade::viscous_laws::constant_viscosity_t visc_law(1.85e-4, 0.72, air);
     
     const real_t p0 = 500.0;
     
@@ -272,7 +273,7 @@ int main(int argc, char** argv)
                 "tau:", spade::utils::pad_str(tau, pn),
                 "dx: ", spade::utils::pad_str(dx, pn),
                 "dt: ", spade::utils::pad_str(dt, pn),
-                "ftt:", spade::utils::pad_str(20.0*u_tau*time_int.time()/delta, pn)
+                "ftt:", spade::utils::pad_str(umax_utau_ratio*u_tau*time_int.time()/delta, pn)
             );
             myfile << nt << " " << cfl << " " << umax << " " << ub << " " << rhob << " " << tau << " " << dx << " " << dt << std::endl;
             myfile.flush();
