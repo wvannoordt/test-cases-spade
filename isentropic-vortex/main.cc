@@ -131,7 +131,6 @@ int main(int argc, char** argv)
     } get_u(air);
     
     spade::reduce_ops::reduce_max<real_t> max_op;
-    spade::reduce_ops::reduce_max<real_t> sum_op;
     real_t time0 = 0.0;
     
     const real_t dx = spade::utils::min(grid.get_dx(0), grid.get_dx(1), grid.get_dx(2));
@@ -155,11 +154,12 @@ int main(int argc, char** argv)
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
     spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, trans);
     
-    spade::utils::mtimer_t tmr("advance");
+    spade::timing::mtimer_t tmr("advance");
     std::ofstream myfile("hist.dat");
     for (auto nt: range(0, nt_max+1))
     {
-        const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_u, max_op);        
+        const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_u, max_op);
+
         if (group.isroot())
         {
             const real_t cfl = umax*dt/dx;
