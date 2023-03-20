@@ -87,7 +87,7 @@ int main(int argc, char** argv)
     const real_t u_theta  = u0*costheta;
     const real_t v_theta  = u0*sintheta;
     
-    auto ini = [&](const spade::ctrs::array<real_t, 3> x) -> prim_t
+    auto ini = [&](const spade::coords::point_t<real_t> x) -> prim_t
     {
         prim_t output;
         const real_t r      = std::sqrt((x[0]-xc)*(x[0]-xc) + (x[1]-yc)*(x[1]-yc));
