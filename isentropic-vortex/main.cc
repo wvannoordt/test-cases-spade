@@ -116,8 +116,7 @@ int main(int argc, char** argv)
         grid.exchange_array(prim);
     }
     
-    spade::convective::totani_lr        tscheme(air);
-    spade::convective::pressure_diss_lr dscheme(air, 0.1);
+    spade::convective::totani_lr tscheme(air);
     
     struct get_u_t
     {
@@ -142,17 +141,21 @@ int main(int argc, char** argv)
     
     auto block_policy = spade::pde_algs::block_flux_all;
     spade::bound_box_t<bool,grid.dim()> boundary_flux(true);
-    auto calc_rhs = [&](auto& resid, auto& sol, const auto& t) -> void
+    auto calc_rhs = [&](auto& resid, const auto& sol, const auto& t) -> void
     {
         resid = 0.0;
-        grid.exchange_array(sol);
         spade::pde_algs::flux_div(sol, resid, block_policy, boundary_flux, tscheme);
+    };
+    
+    auto boundary_cond = [&](auto& sol, const auto& t) -> void
+    {
+        grid.exchange_array(sol);
     };
     
     spade::time_integration::time_axis_t axis(time0, dt);
     spade::time_integration::ssprk34_t alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
-    spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, trans);
+    spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, boundary_cond, trans);
     
     spade::timing::mtimer_t tmr("advance");
     std::ofstream myfile("hist.dat");
