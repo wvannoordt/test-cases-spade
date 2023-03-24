@@ -87,7 +87,7 @@ int main(int argc, char** argv)
     const real_t u_theta  = u0*costheta;
     const real_t v_theta  = u0*sintheta;
     
-    auto ini = [&](const spade::coords::point_t<real_t> x) -> prim_t
+    auto ini = [&](const spade::coords::point_t<real_t>& x) -> prim_t
     {
         prim_t output;
         const real_t r      = std::sqrt((x[0]-xc)*(x[0]-xc) + (x[1]-yc)*(x[1]-yc));
@@ -162,7 +162,7 @@ int main(int argc, char** argv)
     for (auto nt: range(0, nt_max+1))
     {
         const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_u, max_op);
-
+    
         if (group.isroot())
         {
             const real_t cfl = umax*dt/dx;
@@ -194,7 +194,7 @@ int main(int argc, char** argv)
             if (do_output) spade::io::binary_write(filename, time_int.solution());
             if (group.isroot()) print("Done.");
         }
-        
+    
     	tmr.start("advance");
         time_int.advance();
         tmr.stop("advance");
