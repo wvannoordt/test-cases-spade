@@ -1,0 +1,30 @@
+Flow
+{
+    mach           = 0.5
+	reynolds       = 500
+}
+Config
+{
+    cfl            = 0.65
+    nt_max         = 25
+    time_max       = 10.0
+    nt_skip        = 100
+    ck_skip        = 500
+    nx_cell        = 64
+    ny_cell        = 64
+    nz_cell        = 64
+    nx_blck        = 2
+    ny_blck        = 2
+    nz_blck        = 2
+    nguard         = 2
+    xmin           = -3.14159265359
+    xmax           =  3.14159265359
+    ymin           = -3.14159265359
+    ymax           =  3.14159265359
+    zmin           = -3.14159265359
+    zmax           =  3.14159265359
+    init_file      = none
+    do_output      = true
+    output_rhs     = true
+    stats_filename = r1600_m0p5_champs_sp.csv
+}

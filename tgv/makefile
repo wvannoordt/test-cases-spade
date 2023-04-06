@@ -37,7 +37,7 @@ flags = -x cu -std=c++20 -Xcompiler "${flags_old}"
 endif
 
 main:
-	${cc} ${flags} ${compflags} -I${SPADE} -I${PTL}/include main.cc -o ${target}
+	${cc} ${flags} ${compflags} -I${PTL}/include -I${SPADE}/src -I${PTL}/include main.cc -o ${target} -L${PTL}/lib -lPTL
 
 run: main
 	./${target}
