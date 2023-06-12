@@ -26,7 +26,7 @@ compflags += -DUSE_SOURCE_LOCATION=0
 sanny := 0
 
 flags :=
-flags += -std=c++20 -g -O3 -fconcepts-diagnostics-depth=3 -fmax-errors=4
+flags += -std=c++20 -g -O3 -fconcepts-diagnostics-depth=3 -fmax-errors=4 -mavx512vl
 ifeq (${sanny},1)
 flags += -fsanitize=undefined,address -fstack-protector-all
 endif

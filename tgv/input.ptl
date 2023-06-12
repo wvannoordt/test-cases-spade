@@ -6,7 +6,7 @@ Flow
 Config
 {
     cfl            = 0.65
-    nt_max         = 25
+    nt_max         = 101
     time_max       = 10.0
     nt_skip        = 100
     ck_skip        = 500

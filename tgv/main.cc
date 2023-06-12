@@ -1,4 +1,14 @@
 #include <chrono>
+#include <iostream>
+template <typename thing_t> void print_type(const thing_t& t)
+{
+    //g++ only
+    std::string pf(__PRETTY_FUNCTION__);
+    std::size_t start = std::string("void print_type(const thing_t&) [with thing_t = ").length();
+    std::size_t end = pf.length()-1;
+    std::cout << pf.substr(start, end-start) << std::endl;
+}
+
 #include <spade.h>
 #include <PTL.h>
 
@@ -92,7 +102,11 @@ int main(int argc, char** argv)
     spade::coords::identity<real_t> coords;
     
     //create grid
-    spade::grid::cartesian_grid_t grid(num_blocks, cells_in_block, exchange_cells, bounds, coords, group);
+    spade::grid::cartesian_blocks_t blocks(num_blocks, bounds);
+    spade::grid::cartesian_grid_t grid(cells_in_block, exchange_cells, blocks, coords, group);
+    spade::ctrs::array<bool, 3> periodic = true;
+    auto handle = spade::grid::create_exchange(grid, group, periodic);
+    
     
     //create arrays residing on the grid
     prim_t fill1 = 0.0;
@@ -118,11 +132,12 @@ int main(int argc, char** argv)
         return output;
     };
     
+    
     //fill the initial condition
     spade::algs::fill_array(prim, ini);
     
     //fill the guards
-    grid.exchange_array(prim);
+    handle.exchange(prim);
     
     //if a restart file is specified, read the data, fill the array, and fill guards
     if (init_file != "none")
@@ -130,21 +145,21 @@ int main(int argc, char** argv)
         if (group.isroot()) print("reading...");
         spade::io::binary_read(init_file, prim);
         if (group.isroot()) print("Init done.");
-        grid.exchange_array(prim);
+        handle.exchange(prim);
     }
 
     //using the 2nd-order centered KEEP scheme
     spade::convective::totani_lr        tscheme(air);
-    spade::convective::pressure_diss_lr dscheme(air, 0.1, 0.1);
     
     //viscous scheme
     const auto visc_func = [=](const prim_t& vs) -> real_t {return mu0*1.4042*std::pow(vs.T()/T0, 1.50)/((vs.T()/T0)+0.4042);};
     const auto beta_func = [=](const prim_t& vs) -> real_t {return -0.666666666667*visc_func(vs);};
-    const auto cond_func = [=](const prim_t& vs) -> real_t {return (air.get_gamma()*air.get_R()/(air.get_gamma()-1.0))*visc_func(vs)/prandtl;};
+    const auto cond_func = [=](const prim_t& vs) -> real_t {return visc_func(vs)/prandtl;};
     
     prim_t state;
     spade::viscous_laws::udf_t visc_law(state, visc_func, beta_func, cond_func);
-    spade::viscous::visc_lr  vscheme(visc_law);
+    // spade::viscous_laws::constant_viscosity_t visc_law(1.8e-5, 0.72);
+    spade::viscous::visc_lr    vscheme(visc_law, air);
     
     //define an element-wise kernel that returns the acoustic wavespeed for CFL calculation
     struct get_u_t
@@ -165,7 +180,7 @@ int main(int argc, char** argv)
     
     //calculate timestep
     real_t time0 = 0.0;
-    const real_t dx       = spade::utils::min(grid.get_dx(0), grid.get_dx(1), grid.get_dx(2));
+    const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
     const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
     const real_t dt       = targ_cfl*dx/umax_ini;
     
@@ -177,19 +192,18 @@ int main(int argc, char** argv)
 
     auto bc = [&](auto& q, const auto& t) -> void
     {
-        grid.exchange_array(q);
+        handle.exchange(q);
     };
     
     //define the residual calculation
     auto calc_rhs = [&](auto& rhs_in, const auto& q, const auto& t) -> void
     {
         rhs_in = 0.0;
-        // spade::pde_algs::flux_div(q, rhs_in, tscheme, vscheme, dscheme);
         spade::pde_algs::flux_div(q, rhs_in, tscheme, vscheme);
     };
     
+    
     //define the time integrator
-    // spade::deprecated::rk2 time_int(prim, rhs, time0, dt, calc_rhs, trans);
     spade::time_integration::time_axis_t axis(time0, dt);
 	spade::time_integration::ssprk3_t alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
@@ -198,6 +212,8 @@ int main(int argc, char** argv)
     
     spade::timing::mtimer_t tmr("advance");
     
+    
+
     std::ofstream tgv_stats_file(stats_filename);
     std::string col0 = "time";
     std::string col1 = "kinetic_energy";
@@ -216,6 +232,9 @@ int main(int argc, char** argv)
     config.L    = L;
     config.Re   = reynolds;
     config.mu0  = mu0;
+    
+    spade::utils::avg_t<real_t> perf;
+
     
     //time loop
     for (auto nt: range(0, nt_max+1))
@@ -292,6 +311,8 @@ int main(int argc, char** argv)
         int    num_ranks       = group.size();
         real_t updates_per_rank_per_sec = num_points/(num_ranks*dur);
         if (group.isroot()) print("Updates/core/s:", updates_per_rank_per_sec);
+        perf << updates_per_rank_per_sec;
+        if (group.isroot()) print("Mean:", perf.value(), "   St. dev:", perf.stdev());
         
         //check for solution divergence
         if (std::isnan(umax))
@@ -304,5 +325,6 @@ int main(int argc, char** argv)
             return 155;
         }
     }
+
     return 0;
 }

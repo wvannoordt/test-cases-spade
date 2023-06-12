@@ -36,10 +36,10 @@ namespace local
         const auto& grid    = q.get_grid();
         const auto& bounds  = grid.get_bounds();
         std::size_t count   = 0;
-        const auto dx = grid.get_dx();
         
         for (int lb = 0; lb < grid.get_num_local_blocks(); ++lb)
         {
+            const auto dx = grid.get_dx(lb);
             for (int k = 0; k < grid.get_num_cells(2); ++k)
             {
                 for (int j = 0; j < grid.get_num_cells(1); ++j)

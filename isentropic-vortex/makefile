@@ -13,16 +13,17 @@ endif
 compflags :=
 compflags += -DMPI_ENABLE=${MPI_ENABLE}
 
-sanny := 0
-
 flags :=
-flags += -fconcepts-diagnostics-depth=3
+flags += -fconcepts-diagnostics-depth=3 -fmax-errors=1
 ifeq (${sanny},1)
 flags += -fsanitize=undefined,address -fstack-protector-all
 endif
+ifeq (${gee},1)
+flags += -g
+endif
 
 main:
-	${cc} -std=c++20 -O3 ${flags} ${compflags} -I${SPADE} -I${PTL}/include main.cc -o ${target} -L${PTL}/lib -lPTL
+	${cc} -std=c++20 -O3 ${flags} ${compflags} -I${SCIDF}/src -I${SPADE} main.cc -o ${target}
 
 run: main
 	./${target}
