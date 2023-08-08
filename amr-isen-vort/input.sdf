@@ -1,0 +1,26 @@
+Config
+{
+    @import(grid)
+    cfl        = 0.1
+    icfl       = 2.0
+    tol        = 1e-5
+    beta       = 0.5
+    nt_max     = 15000
+    nt_skip    = 250
+    ck_skip    = 1000
+    init_file  = none
+    output     = true
+	do_refine  = true
+	
+	//@cli_require(resid)
+	resid_exch = false
+}
+Fluid
+{
+    u0      = 0.5
+    deltau  = 0.5
+    gamma   = 1.4
+    b       = 0.2
+    cp      = 2.5
+    theta_d = 0.0
+}

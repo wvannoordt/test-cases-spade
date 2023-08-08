@@ -1,19 +1,27 @@
-#include <chrono>
+// #include <chrono>
 #include "scidf.h"
 #include "spade.h"
-#include "typedef.h"
+
+using real_t = double;
+using flux_t = spade::fluid_state::flux_t<real_t>;
+using prim_t = spade::fluid_state::prim_t<real_t>;
+using cons_t = spade::fluid_state::cons_t<real_t>;
 
 int main(int argc, char** argv)
 {
     spade::parallel::mpi_t group(&argc, &argv);
     std::vector<std::string> args;
     for (auto i: range(0, argc)) args.push_back(std::string(argv[i]));
+    std::string input_filename = "input.sdf";
     if (args.size() < 2)
     {
-        if (group.isroot()) print("Please provide an input file name!");
-        return 1;
+        if (group.isroot()) print("Warning: defaulting to", input_filename);
     }
-    std::string input_filename = args[1];
+    else
+    {
+        input_filename = args[1];
+    }
+    
     scidf::node_t input;
     scidf::clargs_t clargs(argc, argv);
     scidf::read(input_filename, input, clargs);
@@ -33,8 +41,8 @@ int main(int argc, char** argv)
     const int checkpoint_skip     = scidf::required<int>         (input["Config"]["ck_skip"])   >> scidf::greater_than(0);
     const int nx                  = scidf::required<int>         (input["Config"]["nx_cell"])   >> (scidf::greater_than(4) && scidf::even);
     const int ny                  = scidf::required<int>         (input["Config"]["ny_cell"])   >> (scidf::greater_than(4) && scidf::even);
-    const int nxb                 = scidf::required<int>         (input["Config"]["nx_blck"])   >> (scidf::greater_than(0) && scidf::even);
-    const int nyb                 = scidf::required<int>         (input["Config"]["ny_blck"])   >> (scidf::greater_than(0) && scidf::even);
+    const int nxb                 = scidf::required<int>         (input["Config"]["nx_blck"])   >> (scidf::greater_than(0));
+    const int nyb                 = scidf::required<int>         (input["Config"]["ny_blck"])   >> (scidf::greater_than(0));
     const int nguard              = scidf::required<int>         (input["Config"]["nguard"])    >> scidf::greater_than(0);
     const real_t xmin             = scidf::required<real_t>      (input["Config"]["xmin"])      ;
     const real_t xmax             = scidf::required<real_t>      (input["Config"]["xmax"])      >> scidf::greater_than(xmin);
@@ -42,12 +50,15 @@ int main(int argc, char** argv)
     const real_t ymax             = scidf::required<real_t>      (input["Config"]["ymax"])      >> scidf::greater_than(ymin);
     const bool do_output          = scidf::required<bool>        (input["Config"]["output"])    ;
     const std::string init_file   = scidf::required<std::string> (input["Config"]["init_file"]) >> (scidf::is_file || scidf::equals("none"));
+    const bool   do_refine        = scidf::required<bool>        (input["Config"]["do_refine"]) ;
+    const bool resid_exch         = scidf::required<bool>        (input["Config"]["resid_exch"]);
     const real_t u0               = scidf::required<real_t>      (input["Fluid"]["u0"])         ;
     const real_t deltau           = scidf::required<real_t>      (input["Fluid"]["deltau"])     >> scidf::greater_than(0.0);
     const real_t gamma            = scidf::required<real_t>      (input["Fluid"]["gamma"])      >> scidf::greater_than(0.0);
     const real_t b                = scidf::required<real_t>      (input["Fluid"]["b"])          >> scidf::greater_than(0.0);
     const real_t cp               = scidf::required<real_t>      (input["Fluid"]["cp"])         >> scidf::greater_than(0.0);
     const real_t theta_d          = scidf::required<real_t>      (input["Fluid"]["theta_d"])    ;
+    
     
     spade::fluid_state::ideal_gas_t<real_t> air;
     air.gamma = gamma;
@@ -71,9 +82,33 @@ int main(int argc, char** argv)
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
     
     
-    spade::grid::cartesian_blocks_t blocks(num_blocks, bounds);
-    spade::grid::cartesian_grid_t   grid(cells_in_block, exchange_cells, blocks, coords, group);
+    spade::amr::amr_blocks_t blocks(num_blocks, bounds);
+    using refine_t = typename decltype(blocks)::refine_type;
     spade::ctrs::array<bool, 2> periodic = true;
+    refine_t ref0  = {true,  true};
+    refine_t refx  = {true,  false};
+    refine_t refy  = {false, true};
+    
+    const auto near = [](const auto x, const auto y) { return spade::utils::abs(y-x) < 1e-2; };
+    auto c0 = blocks.select([&](const auto& node)
+    {
+        const auto bbx = blocks.get_block_box(node.tag);
+        bool y0 = near(bbx.min(0),  0.0) || near(bbx.max(0), 0.0);
+        bool y1 = near(bbx.min(1), -1.0) || near(bbx.max(1), 1.0);
+        return y0 && !y1;
+    });
+    if (do_refine) blocks.refine(c0, periodic, refx, spade::amr::constraints::factor2);
+    
+    auto c1 = blocks.select([&](const auto& node)
+    {
+        const auto bbx = blocks.get_block_box(node.tag);
+        bool y0 = near(bbx.min(1),  0.0) || near(bbx.max(1), 0.0);
+        bool y1 = near(bbx.min(0), -1.0) || near(bbx.max(0), 1.0);
+        return y0 && !y1;
+    });
+    if (do_refine) blocks.refine(c1, periodic, refy, spade::amr::constraints::factor2);
+    
+    spade::grid::cartesian_grid_t grid(cells_in_block, exchange_cells, blocks, coords, group);
     auto handle = spade::grid::create_exchange(grid, group, periodic);
     
     prim_t fill1 = 0.0;
@@ -82,12 +117,16 @@ int main(int argc, char** argv)
     spade::grid::grid_array prim (grid, fill1);
     spade::grid::grid_array rhs  (grid, fill2);
     
+    // spade::grid::grid_array prim (grid, fill1, spade::device::gpu);
+    // spade::grid::grid_array rhs  (grid, fill2, spade::device::gpu);
+    
+    
     const real_t sintheta = std::sin(theta_d*spade::consts::pi/180.0);
     const real_t costheta = std::cos(theta_d*spade::consts::pi/180.0);
     const real_t u_theta  = u0*costheta;
     const real_t v_theta  = u0*sintheta;
     
-    auto ini = [&](const spade::coords::point_t<real_t>& x) -> prim_t
+    auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x)
     {
         prim_t output;
         const real_t r         = std::sqrt((x[0] - xc)*(x[0] - xc) + (x[1] - yc)*(x[1] - yc));
@@ -102,11 +141,17 @@ int main(int argc, char** argv)
         output.u() = u_theta - ur*std::sin(theta_loc);
         output.v() = v_theta + ur*std::cos(theta_loc);
         output.w() = 0.0;
+        // output.p() = 1.0;
+        // output.T() = 1.0;
+        // output.u() = 1.0;
+        // output.v() = 1.0;
+        // output.w() = 1.0;
         return output;
     };
-    
+
     spade::algs::fill_array(prim, ini);
-    handle.exchange(prim);
+    
+    if (!resid_exch) handle.exchange(prim);
     
     if (init_file != "none")
     {
@@ -116,39 +161,34 @@ int main(int argc, char** argv)
         handle.exchange(prim);
     }
     
-    spade::convective::totani_lr tscheme(air);
+    const auto s0 = spade::convective::cent_keep<2>(air);
+    spade::convective::rusanov_t       flx    (air);
+    spade::convective::weno_t          s1     (flx);
+    spade::state_sensor::ducros_t      ducr   (1.0e-2);
+    spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
     
-    struct get_u_t
-    {
-        const spade::fluid_state::ideal_gas_t<real_t>* gas;
-        typedef prim_t arg_type;
-        get_u_t(const spade::fluid_state::ideal_gas_t<real_t>& gas_in) {gas = &gas_in;}
-        real_t operator () (const prim_t& q) const
-        {
-            return sqrt(gas->gamma*gas->R*q.T()) + sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w());
-        }
-    } get_u(air);
+    const auto get_sig = [&](const prim_t& q) { return std::sqrt(air.gamma*air.R*q.T()) + std::sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w()); };
     
     spade::reduce_ops::reduce_max<real_t> max_op;
     real_t time0 = 0.0;
     
-    const real_t dx = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
-    const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
-    const real_t dt     = targ_cfl*dx/umax_ini;
+    const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
+    const real_t umax_ini = spade::algs::transform_reduce(prim, get_sig, max_op);
+    const real_t dt       = targ_cfl*dx/umax_ini;
     
     cons_t transform_state;
-    spade::fluid_state::state_transform_t trans(transform_state, air);
+    spade::fluid_state::state_transform_t trans(transform_state, air, spade::grid::include_exchanges);
     
     auto calc_rhs = [&](auto& resid, const auto& sol, const auto& t)
     {
         resid = 0.0;
         spade::pde_algs::flux_div(sol, resid, tscheme);
-        // handle.exchange(resid); // this works now
+        if (resid_exch) handle.exchange(resid);
     };
     
     auto boundary_cond = [&](auto& sol, const auto& t)
     {
-        handle.exchange(sol);
+        if (!resid_exch) handle.exchange(sol);
     };
     
     spade::time_integration::time_axis_t       axis(time0, dt);
@@ -160,7 +200,7 @@ int main(int argc, char** argv)
     std::ofstream myfile("hist.dat");
     for (auto nt: range(0, nt_max+1))
     {
-        const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_u, max_op);
+        const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_sig, max_op);
     
         if (group.isroot())
         {
@@ -208,6 +248,5 @@ int main(int argc, char** argv)
             return 155;
         }
     }
-    
     return 0;
 }

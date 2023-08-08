@@ -98,6 +98,9 @@ int main(int argc, char** argv)
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
     
     
+    spade::timing::mtimer_t uni_tm("all");
+    uni_tm.start("all");
+    
     //cartesian coordinate system
     spade::coords::identity<real_t> coords;
     
@@ -149,7 +152,8 @@ int main(int argc, char** argv)
     }
 
     //using the 2nd-order centered KEEP scheme
-    spade::convective::totani_lr        tscheme(air);
+    // spade::convective::totani_lr        tscheme(air);
+    const auto tscheme = spade::convective::cent_keep<6> (air);
     
     //viscous scheme
     const auto visc_func = [=](const prim_t& vs) -> real_t {return mu0*1.4042*std::pow(vs.T()/T0, 1.50)/((vs.T()/T0)+0.4042);};
@@ -157,8 +161,8 @@ int main(int argc, char** argv)
     const auto cond_func = [=](const prim_t& vs) -> real_t {return visc_func(vs)/prandtl;};
     
     prim_t state;
-    spade::viscous_laws::udf_t visc_law(state, visc_func, beta_func, cond_func);
-    // spade::viscous_laws::constant_viscosity_t visc_law(1.8e-5, 0.72);
+    //spade::viscous_laws::udf_t visc_law(state, visc_func, beta_func, cond_func);
+    spade::viscous_laws::constant_viscosity_t visc_law(1.8e-5, 0.72);
     spade::viscous::visc_lr    vscheme(visc_law, air);
     
     //define an element-wise kernel that returns the acoustic wavespeed for CFL calculation
@@ -325,6 +329,7 @@ int main(int argc, char** argv)
             return 155;
         }
     }
-
+    uni_tm.stop("all");
+    if (group.isroot()) print(uni_tm);
     return 0;
 }

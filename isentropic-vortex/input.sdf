@@ -5,7 +5,7 @@ Config
     tol       = 1e-5
     beta      = 0.5
     nt_max    = 3500
-    nt_skip   = 250
+    nt_skip   = 500
     ck_skip   = 1000
     nx_cell   = 96
     ny_cell   = 96
