@@ -26,15 +26,18 @@ namespace local
         return os;
     }
     
-    auto calc_stats(auto& q, const auto& config, const auto& visc_law, const auto& gas)
+    auto calc_stats(auto& qarr, const auto& config, const auto& visc_law, const auto& gas)
     {
         tgv_stats_t<real_t> output;
         output.kinetic_energy           = 0.0;
         output.solenoidal_dissipation   = 0.0;
         output.compressible_dissipation = 0.0;
         
-        const auto& grid    = q.get_grid();
+        
+        
+        const auto& grid    = qarr.get_grid();
         const auto& bounds  = grid.get_bounds();
+        const auto  q       = qarr.view();
         std::size_t count   = 0;
         
         for (int lb = 0; lb < grid.get_num_local_blocks(); ++lb)
