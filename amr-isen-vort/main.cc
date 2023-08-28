@@ -123,38 +123,38 @@ int main(int argc, char** argv)
     const real_t u_theta  = u0*costheta;
     const real_t v_theta  = u0*sintheta;
     
-    // auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x)
-    // {
-    //     prim_t output;
-    //     const real_t r         = std::sqrt((x[0] - xc)*(x[0] - xc) + (x[1] - yc)*(x[1] - yc));
-    //     const real_t upmax     = deltau*u0;
-    //     const real_t expfac    = std::exp(0.5*(1.0-((r*r)/(b*b))));
-    //     const real_t ur        = (1.0/b)*deltau*u0*r*expfac;
-    //     const real_t rhor      = std::pow(1.0 - 0.5*(air.gamma-1.0)*deltau*u0*deltau*u0*expfac, 1.0/(air.gamma - 1.0));
-    //     const real_t pr        = std::pow(rhor, air.gamma)/air.gamma;
-    //     const real_t theta_loc = std::atan2(x[1], x[0]);
-    //     output.p() = pr;
-    //     output.T() = pr/(rhor*air.R);
-    //     output.u() = u_theta - ur*std::sin(theta_loc);
-    //     output.v() = v_theta + ur*std::cos(theta_loc);
-    //     output.w() = 0.0;
-    //     return output;
-    // };
-    
-    auto ini2 = _sp_lambda ()
+    auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x)
     {
         prim_t output;
-        output.p() = 0.0;
-        output.T() = 0.0;
-        output.u() = 0.0;
-        output.v() = 0.0;
+        const real_t r         = std::sqrt((x[0] - xc)*(x[0] - xc) + (x[1] - yc)*(x[1] - yc));
+        const real_t upmax     = deltau*u0;
+        const real_t expfac    = std::exp(0.5*(1.0-((r*r)/(b*b))));
+        const real_t ur        = (1.0/b)*deltau*u0*r*expfac;
+        const real_t rhor      = std::pow(1.0 - 0.5*(air.gamma-1.0)*deltau*u0*deltau*u0*expfac, 1.0/(air.gamma - 1.0));
+        const real_t pr        = std::pow(rhor, air.gamma)/air.gamma;
+        const real_t theta_loc = std::atan2(x[1], x[0]);
+        output.p() = pr;
+        output.T() = pr/(rhor*air.R);
+        output.u() = u_theta - ur*std::sin(theta_loc);
+        output.v() = v_theta + ur*std::cos(theta_loc);
         output.w() = 0.0;
         return output;
     };
+    
+    // auto ini2 = _sp_lambda ()
+    // {
+    //     prim_t output;
+    //     output.p() = 0.0;
+    //     output.T() = 0.0;
+    //     output.u() = 0.0;
+    //     output.v() = 0.0;
+    //     output.w() = 0.0;
+    //     return output;
+    // };
 
-    // spade::algs::fill_array(prim, ini);
-    spade::algs::fill_array(prim, ini2);
-    /*
+    spade::algs::fill_array(prim, ini);
+    // spade::algs::fill_array(prim, ini2);
+    
     if (!resid_exch) handle.exchange(prim);
     
     if (init_file != "none")
@@ -252,6 +252,5 @@ int main(int argc, char** argv)
             return 155;
         }
     }
-    */
     return 0;    
 }

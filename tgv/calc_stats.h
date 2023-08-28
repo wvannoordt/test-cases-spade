@@ -37,7 +37,7 @@ namespace local
         
         const auto& grid    = qarr.get_grid();
         const auto& bounds  = grid.get_bounds();
-        const auto  q       = qarr.view();
+        const auto  q       = qarr.image();
         std::size_t count   = 0;
         
         for (int lb = 0; lb < grid.get_num_local_blocks(); ++lb)

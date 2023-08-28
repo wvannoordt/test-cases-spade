@@ -7,7 +7,7 @@ Config
     ck_skip    = 1000
     init_file  = none
     output     = true
-	do_refine  = false
+	do_refine  = true
 	resid_exch = false
 }
 Fluid
