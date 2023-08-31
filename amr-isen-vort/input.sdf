@@ -1,14 +1,15 @@
 Config
 {
     @import(grid)
-    cfl        = 0.1
-    nt_max     = 15000
+    cfl        = 0.25
+    nt_max     = 10001
     nt_skip    = 250
     ck_skip    = 1000
     init_file  = none
     output     = true
 	do_refine  = true
-	resid_exch = false
+	resid_exch = true
+	manual_exchange = true
 }
 Fluid
 {

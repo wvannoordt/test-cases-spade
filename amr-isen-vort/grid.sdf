@@ -3,6 +3,7 @@ ny_cell    = 32
 nx_blck    = 6
 ny_blck    = 6
 nguard     = 2
+
 xmin       = -1.0
 xmax       =  1.0
 ymin       = -1.0

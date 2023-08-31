@@ -153,7 +153,7 @@ int main(int argc, char** argv)
 
     //using the 2nd-order centered KEEP scheme
     // spade::convective::totani_lr        tscheme(air);
-    const auto tscheme = spade::convective::cent_keep<6> (air);
+    const auto tscheme = spade::convective::cent_keep<2> (air);
     
     //viscous scheme
     const auto visc_func = [=](const prim_t& vs) -> real_t {return mu0*1.4042*std::pow(vs.T()/T0, 1.50)/((vs.T()/T0)+0.4042);};
@@ -216,8 +216,6 @@ int main(int argc, char** argv)
     
     spade::timing::mtimer_t tmr("advance");
     
-    
-
     std::ofstream tgv_stats_file(stats_filename);
     std::string col0 = "time";
     std::string col1 = "kinetic_energy";

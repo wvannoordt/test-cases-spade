@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <vector>
+
 #include "scidf.h"
 #include "spade.h"
 
@@ -51,6 +54,7 @@ int main(int argc, char** argv)
     const std::string init_file   = scidf::required<std::string> (input["Config"]["init_file"]) >> (scidf::is_file || scidf::equals("none"));
     const bool   do_refine        = scidf::required<bool>        (input["Config"]["do_refine"]) ;
     const bool resid_exch         = scidf::required<bool>        (input["Config"]["resid_exch"]);
+    const bool manual_exchange    = scidf::required<bool>        (input["Config"]["manual_exchange"]);
     const real_t u0               = scidf::required<real_t>      (input["Fluid"]["u0"])         ;
     const real_t deltau           = scidf::required<real_t>      (input["Fluid"]["deltau"])     >> scidf::greater_than(0.0);
     const real_t gamma            = scidf::required<real_t>      (input["Fluid"]["gamma"])      >> scidf::greater_than(0.0);
@@ -91,8 +95,8 @@ int main(int argc, char** argv)
     auto c0 = blocks.select([&](const auto& node)
     {
         const auto bbx = blocks.get_block_box(node.tag);
-        bool y0 = near(bbx.min(0),  0.0) || near(bbx.max(0), 0.0);
-        bool y1 = near(bbx.min(1), -1.0) || near(bbx.max(1), 1.0);
+        bool y0 = near(bbx.min(0),  0.0 + xc) || near(bbx.max(0), 0.0 + xc);
+        bool y1 = near(bbx.min(1), -1.0 + yc) || near(bbx.max(1), 1.0 + yc);
         return y0 && !y1;
     });
     if (do_refine) blocks.refine(c0, periodic, refx, spade::amr::constraints::factor2);
@@ -100,8 +104,8 @@ int main(int argc, char** argv)
     auto c1 = blocks.select([&](const auto& node)
     {
         const auto bbx = blocks.get_block_box(node.tag);
-        bool y0 = near(bbx.min(1),  0.0) || near(bbx.max(1), 0.0);
-        bool y1 = near(bbx.min(0), -1.0) || near(bbx.max(0), 1.0);
+        bool y0 = near(bbx.min(1),  0.0 + yc) || near(bbx.max(1), 0.0 + yc);
+        bool y1 = near(bbx.min(0), -1.0 + xc) || near(bbx.max(0), 1.0 + xc);
         return y0 && !y1;
     });
     if (do_refine) blocks.refine(c1, periodic, refy, spade::amr::constraints::factor2);
@@ -112,50 +116,34 @@ int main(int argc, char** argv)
     prim_t fill1 = 0.0;
     flux_t fill2 = 0.0;
 
-    spade::grid::grid_array prim (grid, fill1);
-    spade::grid::grid_array rhs  (grid, fill2);
-    
-    // spade::grid::grid_array prim (grid, fill1, spade::device::gpu);
-    // spade::grid::grid_array rhs  (grid, fill2, spade::device::gpu);
+    spade::grid::grid_array prim (grid, fill1, spade::device::best);
+    spade::grid::grid_array rhs  (grid, fill2, spade::device::best);
     
     const real_t sintheta = std::sin(theta_d*spade::consts::pi/180.0);
     const real_t costheta = std::cos(theta_d*spade::consts::pi/180.0);
     const real_t u_theta  = u0*costheta;
     const real_t v_theta  = u0*sintheta;
-    
+
     auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x)
     {
         prim_t output;
-        const real_t r         = std::sqrt((x[0] - xc)*(x[0] - xc) + (x[1] - yc)*(x[1] - yc));
+        const real_t r         = sqrt((x[0] - xc)*(x[0] - xc) + (x[1] - yc)*(x[1] - yc));
         const real_t upmax     = deltau*u0;
-        const real_t expfac    = std::exp(0.5*(1.0-((r*r)/(b*b))));
+        const real_t expfac    = exp(0.5*(1.0-((r*r)/(b*b))));
         const real_t ur        = (1.0/b)*deltau*u0*r*expfac;
-        const real_t rhor      = std::pow(1.0 - 0.5*(air.gamma-1.0)*deltau*u0*deltau*u0*expfac, 1.0/(air.gamma - 1.0));
-        const real_t pr        = std::pow(rhor, air.gamma)/air.gamma;
-        const real_t theta_loc = std::atan2(x[1], x[0]);
+        const real_t rhor      = pow(1.0 - 0.5*(air.gamma-1.0)*deltau*u0*deltau*u0*expfac, 1.0/(air.gamma - 1.0));
+        const real_t pr        = pow(rhor, air.gamma)/air.gamma;
+        const real_t theta_loc = atan2(x[1], x[0]);
         output.p() = pr;
         output.T() = pr/(rhor*air.R);
-        output.u() = u_theta - ur*std::sin(theta_loc);
-        output.v() = v_theta + ur*std::cos(theta_loc);
+        output.u() = u_theta - ur*sin(theta_loc);
+        output.v() = v_theta + ur*cos(theta_loc);
         output.w() = 0.0;
+        
         return output;
     };
-    
-    // auto ini2 = _sp_lambda ()
-    // {
-    //     prim_t output;
-    //     output.p() = 0.0;
-    //     output.T() = 0.0;
-    //     output.u() = 0.0;
-    //     output.v() = 0.0;
-    //     output.w() = 0.0;
-    //     return output;
-    // };
 
-    spade::algs::fill_array(prim, ini);
-    // spade::algs::fill_array(prim, ini2);
-    
-    if (!resid_exch) handle.exchange(prim);
+    spade::algs::fill_array(prim, ini);    
     
     if (init_file != "none")
     {
@@ -168,8 +156,9 @@ int main(int argc, char** argv)
     const auto s0 = spade::convective::cent_keep<2>(air);
     spade::convective::rusanov_t       flx    (air);
     spade::convective::weno_t          s1     (flx);
-    spade::state_sensor::ducros_t      ducr   (1.0e-2);
+    spade::state_sensor::ducros_t      ducr   (1.0e-3);
     spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
+    // const auto tscheme = spade::convective::cent_keep<2>(air);
     
     const auto get_sig = [&](const prim_t& q) { return std::sqrt(air.gamma*air.R*q.T()) + std::sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w()); };
     
@@ -192,7 +181,7 @@ int main(int argc, char** argv)
     
     auto boundary_cond = [&](auto& sol, const auto& t)
     {
-        if (!resid_exch) handle.exchange(sol);
+        if (!resid_exch) handle.exchange(sol);        
     };
     
     spade::time_integration::time_axis_t       axis(time0, dt);
@@ -252,5 +241,5 @@ int main(int argc, char** argv)
             return 155;
         }
     }
-    return 0;    
+    return 0;
 }

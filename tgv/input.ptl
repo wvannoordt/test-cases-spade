@@ -16,7 +16,7 @@ Config
     nx_blck        = 2
     ny_blck        = 2
     nz_blck        = 2
-    nguard         = 3
+    nguard         = 2
     xmin           = -3.14159265359
     xmax           =  3.14159265359
     ymin           = -3.14159265359

@@ -18,7 +18,7 @@ compflags :=
 compflags += -DMPI_ENABLE=${MPI_ENABLE}
 
 hflags :=
-hflags += -fconcepts-diagnostics-depth=3 -fmax-errors=4
+hflags += -fconcepts-diagnostics-depth=3 -fmax-errors=4 -Wterminate
 ifeq (${sanny},1)
 hflags += -fsanitize=undefined,address -fstack-protector-all
 endif
@@ -35,7 +35,8 @@ dflags += -x cu
 dflags += -std=c++20 -O3
 dflags += -ccbin=${cc_h}
 dflags += --extended-lambda
-dflags += --expt-relaxed-constexpr
+dflags += -w
+#dflags += --expt-relaxed-constexpr
 #dflags += --verbose --keep
 
 cc_d = $(shell which nvcc)
