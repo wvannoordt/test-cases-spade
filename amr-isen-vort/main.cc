@@ -119,6 +119,8 @@ int main(int argc, char** argv)
     spade::grid::grid_array prim (grid, fill1, spade::device::best);
     spade::grid::grid_array rhs  (grid, fill2, spade::device::best);
     
+    
+    
     const real_t sintheta = std::sin(theta_d*spade::consts::pi/180.0);
     const real_t costheta = std::cos(theta_d*spade::consts::pi/180.0);
     const real_t u_theta  = u0*costheta;
@@ -153,12 +155,13 @@ int main(int argc, char** argv)
         handle.exchange(prim);
     }
     
-    const auto s0 = spade::convective::cent_keep<2>(air);
-    spade::convective::rusanov_t       flx    (air);
-    spade::convective::weno_t          s1     (flx);
-    spade::state_sensor::ducros_t      ducr   (1.0e-3);
-    spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
-    // const auto tscheme = spade::convective::cent_keep<2>(air);
+    // const auto s0 = spade::convective::cent_keep<2>(air);
+    // spade::convective::rusanov_t       flx    (air);
+    // spade::convective::weno_t          s1     (flx);
+    // spade::state_sensor::ducros_t      ducr   (1.0e-3);
+    // spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
+    
+    const auto tscheme = spade::convective::cent_keep<2>(air);
     
     const auto get_sig = [&](const prim_t& q) { return std::sqrt(air.gamma*air.R*q.T()) + std::sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w()); };
     
@@ -166,7 +169,9 @@ int main(int argc, char** argv)
     real_t time0 = 0.0;
     
     const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
-    const real_t umax_ini = spade::algs::transform_reduce(prim, get_sig, max_op);
+    // const real_t umax_ini = spade::algs::transform_reduce(prim, get_sig, max_op);
+    const real_t umax_ini = 1.0;
+    
     const real_t dt       = targ_cfl*dx/umax_ini;
     
     cons_t transform_state;
@@ -176,12 +181,14 @@ int main(int argc, char** argv)
     {
         resid = 0.0;
         spade::pde_algs::flux_div(sol, resid, tscheme);
-        if (resid_exch) handle.exchange(resid);
+        spade::io::output_vtk("output", "rhs", resid);
+        std::cin.get();
+        // if (resid_exch) handle.exchange(resid);
     };
     
     auto boundary_cond = [&](auto& sol, const auto& t)
     {
-        if (!resid_exch) handle.exchange(sol);        
+        // if (!resid_exch) handle.exchange(sol);
     };
     
     spade::time_integration::time_axis_t       axis(time0, dt);
@@ -193,7 +200,8 @@ int main(int argc, char** argv)
     std::ofstream myfile("hist.dat");
     for (auto nt: range(0, nt_max+1))
     {
-        const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_sig, max_op);
+        // const real_t umax   = spade::algs::transform_reduce(time_int.solution(), get_sig, max_op);
+        const real_t umax = 1.0;
     
         if (group.isroot())
         {
@@ -223,7 +231,7 @@ int main(int argc, char** argv)
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "check"+nstr;
             filename = "checkpoint/"+filename+".bin";
-            if (do_output) spade::io::binary_write(filename, time_int.solution());
+            // if (do_output) spade::io::binary_write(filename, time_int.solution());
             if (group.isroot()) print("Done.");
         }
     
