@@ -119,8 +119,6 @@ int main(int argc, char** argv)
     spade::grid::grid_array prim (grid, fill1, spade::device::best);
     spade::grid::grid_array rhs  (grid, fill2, spade::device::best);
     
-    
-    
     const real_t sintheta = std::sin(theta_d*spade::consts::pi/180.0);
     const real_t costheta = std::cos(theta_d*spade::consts::pi/180.0);
     const real_t u_theta  = u0*costheta;
@@ -181,14 +179,12 @@ int main(int argc, char** argv)
     {
         resid = 0.0;
         spade::pde_algs::flux_div(sol, resid, tscheme);
-        spade::io::output_vtk("output", "rhs", resid);
-        std::cin.get();
-        // if (resid_exch) handle.exchange(resid);
+        if (resid_exch) handle.exchange(resid);
     };
     
     auto boundary_cond = [&](auto& sol, const auto& t)
     {
-        // if (!resid_exch) handle.exchange(sol);
+        if (!resid_exch) handle.exchange(sol);
     };
     
     spade::time_integration::time_axis_t       axis(time0, dt);

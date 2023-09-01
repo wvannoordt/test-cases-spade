@@ -9,8 +9,8 @@ template <typename thing_t> void print_type(const thing_t& t)
     std::cout << pf.substr(start, end-start) << std::endl;
 }
 
+#include "scidf.h"
 #include <spade.h>
-#include <PTL.h>
 
 #include <iomanip>
 
@@ -35,8 +35,8 @@ int main(int argc, char** argv)
     //Inputs are hardcoded for now.
     
     //read the input file
-    PTL::PropertyTree input;
-    input.Read(input_filename);
+    scidf::node_t input;
+    scidf::read(input_filename, input);
     
     const real_t targ_cfl            = input["Config"]["cfl"];
     const int    nt_max              = input["Config"]["nt_max"];
@@ -113,10 +113,10 @@ int main(int argc, char** argv)
     
     //create arrays residing on the grid
     prim_t fill1 = 0.0;
-    spade::grid::grid_array prim(grid, fill1);
+    spade::grid::grid_array prim(grid, fill1, spade::device::best);
     
     flux_t fill2 = 0.0;
-    spade::grid::grid_array rhs  (grid, fill2);
+    spade::grid::grid_array rhs  (grid, fill2, spade::device::best);
     
     //Bull, J. R., Jameson, A. (2015).
     //Simulation of the Taylor-Green vortex using high-order flux reconstruction schemes.
@@ -124,13 +124,13 @@ int main(int argc, char** argv)
     
     //define the initial condition
     using point_type = decltype(grid)::coord_point_type;
-    auto ini = [&](const point_type& x) -> prim_t
+    auto ini = _sp_lambda (const point_type& x)
     {
         prim_t output;
-        output.p() = p0 + (1.0/16.0)*rho0*u0*u0*(std::cos(2*x[0]/L) + std::cos(2*x[1]/L))*(std::cos(2*x[2]/L) + 2.0);
+        output.p() = p0 + (1.0/16.0)*rho0*u0*u0*(cos(2*x[0]/L) + cos(2*x[1]/L))*(cos(2*x[2]/L) + 2.0);
         output.T() = T0;
-        output.u() =  u0*std::sin(x[0]/L)*std::cos(x[1]/L)*std::cos(x[2]/L);
-        output.v() = -u0*std::cos(x[0]/L)*std::sin(x[1]/L)*std::cos(x[2]/L);
+        output.u() =  u0*sin(x[0]/L)*cos(x[1]/L)*cos(x[2]/L);
+        output.v() = -u0*cos(x[0]/L)*sin(x[1]/L)*cos(x[2]/L);
         output.w() = 0.0;
         return output;
     };
@@ -185,8 +185,9 @@ int main(int argc, char** argv)
     //calculate timestep
     real_t time0 = 0.0;
     const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
-    const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
-    const real_t dt       = targ_cfl*dx/umax_ini;
+    // const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
+    // const real_t dt       = targ_cfl*dx/umax_ini;
+    const real_t dt = 0.010639;
     
     const real_t t_characteristic = L/u0;
     
@@ -203,7 +204,9 @@ int main(int argc, char** argv)
     auto calc_rhs = [&](auto& rhs_in, const auto& q, const auto& t) -> void
     {
         rhs_in = 0.0;
-        spade::pde_algs::flux_div(q, rhs_in, tscheme, vscheme);
+        // spade::pde_algs::flux_div(q, rhs_in, tscheme, vscheme);
+        spade::pde_algs::flux_div(q, rhs_in, vscheme);
+        spade::pde_algs::flux_div(q, rhs_in, tscheme);
     };
     
     
@@ -242,22 +245,23 @@ int main(int argc, char** argv)
     for (auto nt: range(0, nt_max+1))
     {
         const auto& sol = time_int.solution();
-        auto stats = local::calc_stats(sol, config, visc_law, air);
+        // auto stats = local::calc_stats(sol, config, visc_law, air);
         
         const auto time_loc = time_int.time()/t_characteristic;
         
-        if (group.isroot())
-        {
-            const int precis = 15;
-            tgv_stats_file << spade::utils::pad_str(local::to_string(time_loc, precis)                      + ",", pad_l+1, ' ');
-            tgv_stats_file << spade::utils::pad_str(local::to_string(stats.kinetic_energy, precis)          + ",", pad_l+1, ' ');
-            tgv_stats_file << spade::utils::pad_str(local::to_string(stats.solenoidal_dissipation, precis)  + ",", pad_l+1, ' ');
-            tgv_stats_file << spade::utils::pad_str(local::to_string(stats.compressible_dissipation, precis)     , pad_l, ' ') << "\n";
-            tgv_stats_file.flush();
-        }
+        // if (group.isroot())
+        // {
+        //     const int precis = 15;
+        //     tgv_stats_file << spade::utils::pad_str(local::to_string(time_loc, precis)                      + ",", pad_l+1, ' ');
+        //     tgv_stats_file << spade::utils::pad_str(local::to_string(stats.kinetic_energy, precis)          + ",", pad_l+1, ' ');
+        //     tgv_stats_file << spade::utils::pad_str(local::to_string(stats.solenoidal_dissipation, precis)  + ",", pad_l+1, ' ');
+        //     tgv_stats_file << spade::utils::pad_str(local::to_string(stats.compressible_dissipation, precis)     , pad_l, ' ') << "\n";
+        //     tgv_stats_file.flush();
+        // }
         
         //cacluate the maximum wavespeed |u|+a
-        const real_t umax   = spade::algs::transform_reduce(sol, get_u, max_op);        
+        // const real_t umax   = spade::algs::transform_reduce(sol, get_u, max_op);       
+        const real_t umax   = 1.0;
         
         //print some nice things to the screen
         if (group.isroot())
@@ -290,7 +294,7 @@ int main(int argc, char** argv)
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "check"+nstr;
             filename = "checkpoint/"+filename+".bin";
-            if (do_output) spade::io::binary_write(filename, sol);
+            // if (do_output) spade::io::binary_write(filename, sol);
             if (group.isroot()) print("Done.");
         }
         

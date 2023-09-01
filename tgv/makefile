@@ -4,40 +4,51 @@ ifndef MPI_ENABLE
 MPI_ENABLE := 1
 endif
 
+ifndef cuda
+cuda := 1
+endif
+
 ifeq (${MPI_ENABLE},1)
-cc := $(shell which mpicxx)
+cc_h := $(shell which mpicxx)
 else
-cc := $(shell which g++)
-endif
-
-ifndef use_cuda
-use_cuda := 0
-endif
-
-ifeq (${use_cuda},1)
-cc_host = ${cc}
-cc := $(shell which nvcc) -ccbin=${cc_host}
+cc_h := $(shell which g++)
 endif
 
 compflags :=
 compflags += -DMPI_ENABLE=${MPI_ENABLE}
-compflags += -DUSE_SOURCE_LOCATION=0
 
-sanny := 0
-
-flags :=
-flags += -std=c++20 -g -Ofast -fconcepts-diagnostics-depth=3 -fmax-errors=4 -mavx512vl -ffast-math
+hflags :=
+hflags += -fconcepts-diagnostics-depth=3 -fmax-errors=4 -Wterminate
 ifeq (${sanny},1)
-flags += -fsanitize=undefined,address -fstack-protector-all
+hflags += -fsanitize=undefined,address -fstack-protector-all
+endif
+ifeq (${gee},1)
+hflags += -g
 endif
 
-ifeq (${use_cuda},1)
-flags_old := ${flags}
-flags = -x cu -std=c++20 -Xcompiler "${flags_old}"
-endif
+hflags += -std=c++20 -O3
+hflags += ${compflags}
+flags = ${hflags}
 
+dflags :=
+dflags += -x cu
+dflags += -std=c++20 -O3
+dflags += -ccbin=${cc_h}
+dflags += --extended-lambda
+dflags += -w
+#dflags += --expt-relaxed-constexpr
+#dflags += --verbose --keep
+
+cc_d = $(shell which nvcc)
+
+cc := ${cc_h}
+flags := ${hflags}
+ifeq (${cuda},1)
+cc = ${cc_d}
+flags := ${dflags} -Xcompiler "${hflags}"
+endif
 main:
-	${cc} ${flags} ${compflags} -I${PTL}/include -I${SPADE}/src -I${PTL}/include main.cc -o ${target} -L${PTL}/lib -lPTL
+	${cc} ${flags} -I${SCIDF}/src -I${SPADE} main.cc -o ${target}
 
 run: main
 	./${target}
