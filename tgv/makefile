@@ -37,7 +37,8 @@ dflags += -ccbin=${cc_h}
 dflags += --extended-lambda
 dflags += -w
 #dflags += --expt-relaxed-constexpr
-#dflags += --verbose --keep
+dflags += --verbose
+#dflags += --keep
 
 cc_d = $(shell which nvcc)
 

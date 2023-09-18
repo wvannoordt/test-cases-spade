@@ -197,7 +197,7 @@ int main(int argc, char** argv)
 
     auto bc = [&](auto& q, const auto& t) -> void
     {
-        handle.exchange(q);
+	  handle.exchange(q);
     };
     
     //define the residual calculation
@@ -205,14 +205,14 @@ int main(int argc, char** argv)
     {
         rhs_in = 0.0;
         // spade::pde_algs::flux_div(q, rhs_in, tscheme, vscheme);
-        spade::pde_algs::flux_div(q, rhs_in, vscheme);
+		//        spade::pde_algs::flux_div(q, rhs_in, vscheme);
         spade::pde_algs::flux_div(q, rhs_in, tscheme);
     };
     
     
     //define the time integrator
     spade::time_integration::time_axis_t axis(time0, dt);
-	spade::time_integration::ssprk3_t alg;
+	spade::time_integration::ssprk34_t alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
     spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, bc, trans);
     

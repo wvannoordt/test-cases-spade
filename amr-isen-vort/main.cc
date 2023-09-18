@@ -54,7 +54,6 @@ int main(int argc, char** argv)
     const std::string init_file   = scidf::required<std::string> (input["Config"]["init_file"]) >> (scidf::is_file || scidf::equals("none"));
     const bool   do_refine        = scidf::required<bool>        (input["Config"]["do_refine"]) ;
     const bool resid_exch         = scidf::required<bool>        (input["Config"]["resid_exch"]);
-    const bool manual_exchange    = scidf::required<bool>        (input["Config"]["manual_exchange"]);
     const real_t u0               = scidf::required<real_t>      (input["Fluid"]["u0"])         ;
     const real_t deltau           = scidf::required<real_t>      (input["Fluid"]["deltau"])     >> scidf::greater_than(0.0);
     const real_t gamma            = scidf::required<real_t>      (input["Fluid"]["gamma"])      >> scidf::greater_than(0.0);
@@ -83,34 +82,38 @@ int main(int argc, char** argv)
     
     std::filesystem::path out_path("checkpoint");
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
-    spade::amr::amr_blocks_t blocks(num_blocks, bounds);
-    using refine_t = typename decltype(blocks)::refine_type;
+    
     spade::ctrs::array<bool, 2> periodic = true;
+    spade::amr::amr_blocks_t blocks(num_blocks, bounds);
+    spade::grid::cartesian_grid_t grid(cells_in_block, exchange_cells, blocks, coords, group);
+    
+    
+    using refine_t = typename decltype(blocks)::refine_type;
     refine_t ref0  = {true,  true};
     refine_t refx  = {true,  false};
     refine_t refy  = {false, true};
     
     const auto near = [](const auto x, const auto y) { return spade::utils::abs(y-x) < 1e-2; };
     
-    auto c0 = blocks.select([&](const auto& node)
+    //No longer do this on the independent blocks object!
+    auto c0 = grid.select_blocks([&](const auto& lb)
     {
-        const auto bbx = blocks.get_block_box(node.tag);
+        const auto bbx = grid.get_bounding_box(lb);
         bool y0 = near(bbx.min(0),  0.0 + xc) || near(bbx.max(0), 0.0 + xc);
         bool y1 = near(bbx.min(1), -1.0 + yc) || near(bbx.max(1), 1.0 + yc);
         return y0 && !y1;
     });
-    if (do_refine) blocks.refine(c0, periodic, refx, spade::amr::constraints::factor2);
+    if (do_refine) grid.refine_blocks(c0, periodic, refx, spade::amr::constraints::factor2);
     
-    auto c1 = blocks.select([&](const auto& node)
+    auto c1 = grid.select_blocks([&](const auto& lb)
     {
-        const auto bbx = blocks.get_block_box(node.tag);
+        const auto bbx = grid.get_bounding_box(lb);
         bool y0 = near(bbx.min(1),  0.0 + yc) || near(bbx.max(1), 0.0 + yc);
         bool y1 = near(bbx.min(0), -1.0 + xc) || near(bbx.max(0), 1.0 + xc);
         return y0 && !y1;
     });
-    if (do_refine) blocks.refine(c1, periodic, refy, spade::amr::constraints::factor2);
+    if (do_refine) grid.refine_blocks(c1, periodic, refy, spade::amr::constraints::factor2);
     
-    spade::grid::cartesian_grid_t grid(cells_in_block, exchange_cells, blocks, coords, group);
     auto handle = spade::grid::create_exchange(grid, group, periodic);
     
     prim_t fill1 = 0.0;

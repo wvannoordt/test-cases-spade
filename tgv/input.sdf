@@ -6,16 +6,16 @@ Flow
 Config
 {
     cfl            = 0.65
-    nt_max         = 10
+    nt_max         = 10000
     time_max       = 10.0
-    nt_skip        = 10
+    nt_skip        = 250
     ck_skip        = 500
-    nx_cell        = 64
-    ny_cell        = 64
-    nz_cell        = 64
-    nx_blck        = 2
-    ny_blck        = 2
-    nz_blck        = 2
+    nx_cell        = 32
+    ny_cell        = 32
+    nz_cell        = 32
+    nx_blck        = 4
+    ny_blck        = 4
+    nz_blck        = 4
     nguard         = 2
     xmin           = -3.14159265359
     xmax           =  3.14159265359
