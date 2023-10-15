@@ -37,8 +37,7 @@ dflags += -ccbin=${cc_h}
 dflags += --extended-lambda
 dflags += -w
 #dflags += --expt-relaxed-constexpr
-#dflags += --verbose
-#dflags += --keep
+#dflags += --verbose --keep
 
 cc_d = $(shell which nvcc)
 
@@ -49,7 +48,7 @@ cc = ${cc_d}
 flags := ${dflags} -Xcompiler "${hflags}"
 endif
 main:
-	${cc} ${flags} -I${SCIDF}/src -I${SPADE} main.cc -o ${target}
+	${cc} ${flags} -I${SCIDF}/src -I${SPADE}/src main.cc -o ${target}
 
 run: main
 	./${target}

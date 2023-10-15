@@ -102,7 +102,7 @@ int main(int argc, char** argv)
         bool y0 = near(bbx.min(0),  0.0 + xc) || near(bbx.max(0), 0.0 + xc);
         bool y1 = near(bbx.min(1), -1.0 + yc) || near(bbx.max(1), 1.0 + yc);
         return y0 && !y1;
-    });
+    }, spade::partition::global);
     if (do_refine) grid.refine_blocks(c0, periodic, refx, spade::amr::constraints::factor2);
     
     auto c1 = grid.select_blocks([&](const auto& lb)
@@ -111,7 +111,7 @@ int main(int argc, char** argv)
         bool y0 = near(bbx.min(1),  0.0 + yc) || near(bbx.max(1), 0.0 + yc);
         bool y1 = near(bbx.min(0), -1.0 + xc) || near(bbx.max(0), 1.0 + xc);
         return y0 && !y1;
-    });
+    }, spade::partition::global);
     if (do_refine) grid.refine_blocks(c1, periodic, refy, spade::amr::constraints::factor2);
     
     auto handle = spade::grid::create_exchange(grid, group, periodic);
@@ -146,7 +146,7 @@ int main(int argc, char** argv)
         return output;
     };
 
-    spade::algs::fill_array(prim, ini);    
+    spade::algs::fill_array(prim, ini);
     
     if (init_file != "none")
     {
