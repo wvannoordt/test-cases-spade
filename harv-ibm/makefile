@@ -5,7 +5,7 @@ MPI_ENABLE := 1
 endif
 
 ifndef cuda
-cuda := 1
+cuda := 0
 endif
 
 ifeq (${MPI_ENABLE},1)
@@ -48,7 +48,7 @@ cc = ${cc_d}
 flags := ${dflags} -Xcompiler "${hflags}"
 endif
 main:
-	${cc} ${flags} -I${SCIDF}/src -I${SPADE}/src main.cc -o ${target}
+	${cc} ${flags} -I${SCIDF}/src -Ilocal -I${SPADE}/src main.cc -o ${target}
 
 run: main
 	./${target}

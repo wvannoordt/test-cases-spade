@@ -4,6 +4,8 @@
 #include "scidf.h"
 #include "spade.h"
 
+#include "sample_cloud.h"
+
 using real_t = double;
 using flux_t = spade::fluid_state::flux_t<real_t>;
 using prim_t = spade::fluid_state::prim_t<real_t>;
@@ -94,6 +96,43 @@ int main(int argc, char** argv)
     const auto ghosts = spade::ibm::compute_ghosts(grid, geom);
     if (group.isroot()) print("Done");
     
+    if (group.isroot()) print("Compute ips");
+    auto ips = local::compute_ghost_sample_points(ghosts, grid, 0.008);
+    /*
+    using pnt_t = spade::coords::point_t<real_t>;
+    spade::device::shared_vector<pnt_t> ips;
+    std::size_t idx = 0;
+    for (const auto& ig: ghosts.indices)
+    {
+        const auto xg   = grid.get_comp_coords(ig);
+        const auto xb   = ghosts.boundary_points[idx];
+        const auto xc   = ghosts.closest_points[idx];
+        auto nv         = xb-xg;
+        auto dist       = spade::ctrs::array_norm(nv);
+        const auto lb   = spade::utils::tag[spade::partition::local](ig.lb());
+        const auto dx   = grid.get_dx(lb);
+        const auto diag = spade::ctrs::array_norm(dx);
+        
+        //Figure out this magic number
+        const auto tol  = 5e-2;
+        if (dist < tol*diag)
+        {
+            nv  = 0.0*nv;
+            nv += ghosts.boundary_normals[idx];
+        }
+        nv /= spade::ctrs::array_norm(nv);
+        // const auto sampldist = sfunc(idx);
+        const pnt_t ip = xg + 0.005*nv;
+        ips.push_back(ip);
+        idx++;
+    }
+    */
+        
+    if (group.isroot()) print("Done");
+    
+    spade::io::output_vtk("debug/ips.vtk", ips);
+    spade::io::output_vtk("debug/prc.vtk", ghosts.boundary_points);
+    
     auto handle = spade::grid::create_exchange(grid, group, periodic);
     
     prim_t fill1 = 0.0;
@@ -139,6 +178,7 @@ int main(int argc, char** argv)
     // spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
     
     const auto tscheme = spade::convective::cent_keep<2>(air);
+    // const auto tscheme = spade::convective::first_order(air);
     
     const auto get_sig = [&](const prim_t& q) { return std::sqrt(air.gamma*air.R*q.T()) + std::sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w()); };
     
