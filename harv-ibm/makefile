@@ -18,7 +18,7 @@ compflags :=
 compflags += -DMPI_ENABLE=${MPI_ENABLE}
 
 hflags :=
-hflags += -fconcepts-diagnostics-depth=3 -fmax-errors=4 -Wterminate
+hflags += -fconcepts-diagnostics-depth=3 -fmax-errors=4
 ifeq (${sanny},1)
 hflags += -fsanitize=undefined,address -fstack-protector-all
 endif

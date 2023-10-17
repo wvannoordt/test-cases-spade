@@ -51,6 +51,7 @@ int main(int argc, char** argv)
     bounds.bnds = bnd;
     const std::string geom_fname = input["Grid"]["geom"];
     const int         maxlevel   = input["Grid"]["maxlevel"];
+    const real_t      sampl_dist = input["Grid"]["sampl_dist"];
 
     spade::coords::identity<real_t> coords;
     
@@ -97,41 +98,8 @@ int main(int argc, char** argv)
     if (group.isroot()) print("Done");
     
     if (group.isroot()) print("Compute ips");
-    auto ips = local::compute_ghost_sample_points(ghosts, grid, 0.008);
-    /*
-    using pnt_t = spade::coords::point_t<real_t>;
-    spade::device::shared_vector<pnt_t> ips;
-    std::size_t idx = 0;
-    for (const auto& ig: ghosts.indices)
-    {
-        const auto xg   = grid.get_comp_coords(ig);
-        const auto xb   = ghosts.boundary_points[idx];
-        const auto xc   = ghosts.closest_points[idx];
-        auto nv         = xb-xg;
-        auto dist       = spade::ctrs::array_norm(nv);
-        const auto lb   = spade::utils::tag[spade::partition::local](ig.lb());
-        const auto dx   = grid.get_dx(lb);
-        const auto diag = spade::ctrs::array_norm(dx);
-        
-        //Figure out this magic number
-        const auto tol  = 5e-2;
-        if (dist < tol*diag)
-        {
-            nv  = 0.0*nv;
-            nv += ghosts.boundary_normals[idx];
-        }
-        nv /= spade::ctrs::array_norm(nv);
-        // const auto sampldist = sfunc(idx);
-        const pnt_t ip = xg + 0.005*nv;
-        ips.push_back(ip);
-        idx++;
-    }
-    */
-        
+    auto ips = local::compute_ghost_sample_points(ghosts, grid, sampl_dist);
     if (group.isroot()) print("Done");
-    
-    spade::io::output_vtk("debug/ips.vtk", ips);
-    spade::io::output_vtk("debug/prc.vtk", ghosts.boundary_points);
     
     auto handle = spade::grid::create_exchange(grid, group, periodic);
     
@@ -140,6 +108,8 @@ int main(int argc, char** argv)
 
     spade::grid::grid_array prim (grid, fill1, spade::device::best);
     spade::grid::grid_array rhs  (grid, fill2, spade::device::best);
+    
+    auto interp = spade::grid::create_interpolation(prim, ips);
 
     const real_t Tinf  = 75.0;
     const real_t Pinf  = 5000.0;
@@ -162,6 +132,13 @@ int main(int argc, char** argv)
     };
 
     spade::algs::fill_array(prim, ini);
+    
+    auto sampldata = spade::grid::sample_array(prim, interp);
+    
+    for (auto ii: sampldata)
+    {
+        print(ii);
+    }
     
     if (init_file != "none")
     {

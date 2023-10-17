@@ -1,11 +1,12 @@
 Grid
 {
-    ncell    = [14, 14, 14]
-    nblck    = [4,  4 , 2 ]
-    nexch    = [2,  2,  2 ]
-    bounds   = [-0.1, 0.2, -0.15, 0.15, 0.0, 0.15]
-    geom     = "sphere.vtk"
-    maxlevel = 3
+    ncell      = [14, 14, 14]
+    nblck      = [4,  4 , 2 ]
+    nexch      = [2,  2,  2 ]
+    bounds     = [-0.1, 0.2, -0.15, 0.15, 0.0, 0.15]
+    geom       = "sphere.vtk"
+    maxlevel   = 3
+    sampl_dist = 0.008
 }
 Config
 {
