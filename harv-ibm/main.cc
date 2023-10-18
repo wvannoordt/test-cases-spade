@@ -135,10 +135,6 @@ int main(int argc, char** argv)
     
     auto sampldata = spade::grid::sample_array(prim, interp);
     
-    for (auto ii: sampldata)
-    {
-        print(ii);
-    }
     
     if (init_file != "none")
     {
