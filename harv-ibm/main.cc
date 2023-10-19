@@ -59,7 +59,7 @@ int main(int argc, char** argv)
     std::filesystem::path out_path("checkpoint");
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
     
-    spade::ctrs::array<bool, 3> periodic = true;
+    spade::ctrs::array<bool, 3> periodic = false;
     spade::amr::amr_blocks_t blocks(num_blocks, bounds);
     
     if (group.isroot()) print("Create grid");
@@ -88,7 +88,7 @@ int main(int argc, char** argv)
         };
         auto rblks = grid.select_blocks(bndy_intersect, spade::partition::global);
         if (rblks.size() == 0) break;
-        grid.refine_blocks(rblks);
+        grid.refine_blocks(rblks, periodic);
     }
     if (group.isroot()) print("Done");
     if (group.isroot()) print("Num. points:", grid.get_grid_size());
@@ -124,16 +124,12 @@ int main(int argc, char** argv)
     
     auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x)
     {
-        // real_t dfac = (sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - 0.08)/0.08;
-        // if (dfac < 0.001) dfac = 0.0;
-        // if (dfac > 1.0) dfac = 1.0;
-        real_t dfac = 1.0;
         prim_t output;
         output.p() = Pinf;
         output.T() = Tinf;
-        output.u() = dfac*uu;
-        output.v() = dfac*vv;
-        output.w() = dfac*ww;
+        output.u() = uu;
+        output.v() = vv;
+        output.w() = ww;
         return output;
     };
 
@@ -171,24 +167,11 @@ int main(int argc, char** argv)
     cons_t transform_state;
     spade::fluid_state::state_transform_t trans(transform_state, air, spade::grid::include_exchanges);
     
-    
-    auto zr = _sp_lambda (const spade::coords::point_t<real_t>& x, const flux_t& f)
-    {
-        real_t dfac = (sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))/0.1;
-        if (dfac < -0.001)
-        {
-            flux_t output = 0.0;
-            return output;
-        }
-        return f;
-    };
-    
     auto calc_rhs = [&](auto& resid, const auto& sol, const auto& t)
     {
         resid = 0.0;
         spade::pde_algs::flux_div(sol, resid, tscheme);
         local::zero_ghost_rhs(resid, ghosts);
-        spade::algs::fill_array(resid, zr);
     };
     
     auto boundary_cond = [&](auto& sol, const auto& t)
