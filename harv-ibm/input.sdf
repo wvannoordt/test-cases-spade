@@ -1,19 +1,20 @@
 Grid
 {
-    ncell      = [14, 14, 14]
-    nblck      = [4,  4 , 2 ]
+	$cnum = 48
+    ncell      = [$(cnum), $(cnum), $(cnum)]
+    nblck      = [6,  6 , 6 ]
     nexch      = [2,  2,  2 ]
-    bounds     = [-0.1, 0.2, -0.15, 0.15, 0.0, 0.15]
+    bounds     = [-0.1, 0.85, -0.25, 0.25, -0.25, 0.25]
     geom       = "sphere.vtk"
-    maxlevel   = 3
-    sampl_dist = 0.008
+    maxlevel   = 0
+    sampl_dist = 3.0
 }
 Config
 {
-    cfl        = 0.25
+    cfl        = 0.1
     init_file  = "none"
-    nt_max     = 10
-    nt_skip    = 1
+    nt_max     = 25000
+    nt_skip    = 2500
 }
 Fluid
 {

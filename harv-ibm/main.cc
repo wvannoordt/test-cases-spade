@@ -5,6 +5,7 @@
 #include "spade.h"
 
 #include "sample_cloud.h"
+#include "fill_ghosts.h"
 
 using real_t = double;
 using flux_t = spade::fluid_state::flux_t<real_t>;
@@ -58,7 +59,7 @@ int main(int argc, char** argv)
     std::filesystem::path out_path("checkpoint");
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
     
-    spade::ctrs::array<bool, 3> periodic = false;
+    spade::ctrs::array<bool, 3> periodic = true;
     spade::amr::amr_blocks_t blocks(num_blocks, bounds);
     
     if (group.isroot()) print("Create grid");
@@ -72,7 +73,6 @@ int main(int argc, char** argv)
     
     using refine_t = typename decltype(blocks)::refine_type;
     refine_t ref0  = {true, true, true};
-    
     
     if (group.isroot()) print("Begin refine");
     int iter = 0;
@@ -98,7 +98,9 @@ int main(int argc, char** argv)
     if (group.isroot()) print("Done");
     
     if (group.isroot()) print("Compute ips");
-    auto ips = local::compute_ghost_sample_points(ghosts, grid, sampl_dist);
+    const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
+    auto ips = local::compute_ghost_sample_points(ghosts, grid, sampl_dist*dx);
+    spade::io::output_vtk("debug/ips.vtk", ips);
     if (group.isroot()) print("Done");
     
     auto handle = spade::grid::create_exchange(grid, group, periodic);
@@ -122,12 +124,16 @@ int main(int argc, char** argv)
     
     auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x)
     {
+        // real_t dfac = (sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]) - 0.08)/0.08;
+        // if (dfac < 0.001) dfac = 0.0;
+        // if (dfac > 1.0) dfac = 1.0;
+        real_t dfac = 1.0;
         prim_t output;
         output.p() = Pinf;
         output.T() = Tinf;
-        output.u() = uu;
-        output.v() = vv;
-        output.w() = ww;
+        output.u() = dfac*uu;
+        output.v() = dfac*vv;
+        output.w() = dfac*ww;
         return output;
     };
 
@@ -150,34 +156,52 @@ int main(int argc, char** argv)
     // spade::state_sensor::ducros_t      ducr   (1.0e-3);
     // spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
     
-    const auto tscheme = spade::convective::cent_keep<2>(air);
-    // const auto tscheme = spade::convective::first_order(air);
+    // const auto tscheme = spade::convective::cent_keep<2>(air);
+    
+    spade::convective::first_order_t tscheme(air);
     
     const auto get_sig = [&](const prim_t& q) { return std::sqrt(air.gamma*air.R*q.T()) + std::sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w()); };
     
     spade::reduce_ops::reduce_max<real_t> max_op;
     real_t time0 = 0.0;
     
-    const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
     const real_t umax_ini = Uinf + sqrt(air.R*air.gamma*Tinf);
     const real_t dt       = targ_cfl*dx/umax_ini;
     
     cons_t transform_state;
     spade::fluid_state::state_transform_t trans(transform_state, air, spade::grid::include_exchanges);
     
+    
+    auto zr = _sp_lambda (const spade::coords::point_t<real_t>& x, const flux_t& f)
+    {
+        real_t dfac = (sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]))/0.1;
+        if (dfac < -0.001)
+        {
+            flux_t output = 0.0;
+            return output;
+        }
+        return f;
+    };
+    
     auto calc_rhs = [&](auto& resid, const auto& sol, const auto& t)
     {
         resid = 0.0;
         spade::pde_algs::flux_div(sol, resid, tscheme);
+        local::zero_ghost_rhs(resid, ghosts);
+        spade::algs::fill_array(resid, zr);
     };
     
     auto boundary_cond = [&](auto& sol, const auto& t)
     {
+        spade::grid::sample_array(sampldata, sol, interp);
+        local::fill_ghost_vals(sol, ghosts, ips, sampldata);
         handle.exchange(sol);
     };
     
+    boundary_cond(prim, time0);
+    
     spade::time_integration::time_axis_t       axis(time0, dt);
-    spade::time_integration::ssprk34_t         alg;
+    spade::time_integration::rk2_t             alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
     spade::time_integration::integrator_t      time_int(axis, alg, q, calc_rhs, boundary_cond, trans);
     

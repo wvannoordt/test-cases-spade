@@ -19,6 +19,7 @@ namespace local
             pnt_t ip = xc;
             ip += sampldist*nv;
             ips.push_back(ip);
+            
             idx++;
         }
 
