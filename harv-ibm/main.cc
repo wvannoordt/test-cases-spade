@@ -74,6 +74,7 @@ int main(int argc, char** argv)
     using refine_t = typename decltype(blocks)::refine_type;
     refine_t ref0  = {true, true, true};
     
+    const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0))*pow(2.0, -maxlevel);
     if (group.isroot()) print("Begin refine");
     int iter = 0;
     while (true)
@@ -98,7 +99,6 @@ int main(int argc, char** argv)
     if (group.isroot()) print("Done");
     
     if (group.isroot()) print("Compute ips");
-    const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
     auto ips = local::compute_ghost_sample_points(ghosts, grid, sampl_dist*dx);
     spade::io::output_vtk("debug/ips.vtk", ips);
     if (group.isroot()) print("Done");
@@ -146,15 +146,17 @@ int main(int argc, char** argv)
         handle.exchange(prim);
     }
     
-    // const auto s0 = spade::convective::cent_keep<2>(air);
+    const auto s0 = spade::convective::cent_keep<2>(air);
     // spade::convective::rusanov_t       flx    (air);
     // spade::convective::weno_t          s1     (flx);
-    // spade::state_sensor::ducros_t      ducr   (1.0e-3);
-    // spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
+    spade::state_sensor::ducros_t      ducr   (1.0e-3);
+    spade::convective::first_order_t s1(air);
+    spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
     
     // const auto tscheme = spade::convective::cent_keep<2>(air);
     
-    spade::convective::first_order_t tscheme(air);
+    // spade::convective::first_order_t tscheme(air);
+    // spade::convective::muscl_t tscheme(air);
     
     const auto get_sig = [&](const prim_t& q) { return std::sqrt(air.gamma*air.R*q.T()) + std::sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w()); };
     
@@ -184,7 +186,7 @@ int main(int argc, char** argv)
     boundary_cond(prim, time0);
     
     spade::time_integration::time_axis_t       axis(time0, dt);
-    spade::time_integration::rk2_t             alg;
+    spade::time_integration::ssprk34_t         alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
     spade::time_integration::integrator_t      time_int(axis, alg, q, calc_rhs, boundary_cond, trans);
     
