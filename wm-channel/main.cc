@@ -92,7 +92,26 @@ int main(int argc, char** argv)
         grid.refine_blocks(rblks, periodic);
     }
     
+    const auto expd = [&](const auto& lb)
+    {
+        const auto& node = grid.get_blocks().get_amr_node(lb);
+        if (node.level[0] == maxlevel) return false;
+        for (const auto& e: node.neighbors)
+        {
+            const auto& neigh = e.endpoint.get();
+            if (neigh.level[0] == maxlevel)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
     
+    auto rblks = grid.select_blocks(expd, spade::partition::global);
+    if (maxlevel > 0)
+    {
+        grid.refine_blocks(rblks, periodic);
+    }
     
     if (group.isroot()) print("Done");
     if (group.isroot()) print("Num. points:", grid.get_grid_size());
@@ -193,15 +212,14 @@ int main(int argc, char** argv)
         return prim_t{Pinf, Tinf, uu, vv, ww};
     };
     
-    auto sym_bdy    = spade::boundary::zmin;
-    auto extrap_bdy = spade::boundary::zmax || spade::boundary::ymin || spade::boundary::ymax || spade::boundary::xmax;
+    auto sym_bdy    = spade::boundary::zmin || spade::boundary::ymin;
+    auto extrap_bdy = spade::boundary::zmax || spade::boundary::ymax || spade::boundary::xmax;
     auto const_bdy  = spade::boundary::xmin;
     
     auto boundary_cond = [&](parray_t& sol, const real_t& t)
     {
         spade::algs::boundary_fill(sol, extrap_bdy, spade::boundary::extrapolate<3>);
         spade::algs::boundary_fill(sol, sym_bdy,    symmetry);
-        spade::algs::boundary_fill(sol, extrap_bdy, freestream);
         spade::algs::boundary_fill(sol, const_bdy,  freestream);
         spade::grid::sample_array(sampldata, sol, interp);
         local::fill_ghost_vals(sol, ghosts, ips, sampldata);
@@ -211,8 +229,8 @@ int main(int argc, char** argv)
     boundary_cond(prim, time0);
     
     spade::time_integration::time_axis_t       axis(time0, dt);
-    // spade::time_integration::ssprk34_t         alg;
-    spade::time_integration::rk2_t         alg;
+    spade::time_integration::ssprk34_t         alg;
+    // spade::time_integration::rk2_t         alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
     spade::time_integration::integrator_t      time_int(axis, alg, q, calc_rhs, boundary_cond, trans);
     

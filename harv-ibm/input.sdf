@@ -1,19 +1,19 @@
 Grid
 {
-    ncell      = [14, 14, 14]
-    nblck      = [6,  2 , 2 ]
+    ncell      = [8,  8,  8 ]
+    nblck      = [1,  4 , 2 ]
     nexch      = [2,  2,  2 ]
-    bounds     = [-0.055, 0.7, -0.15, 0.15, -0.15, 0.15]
+    bounds     = [-0.01, 0.05, -0.15, 0.15, 0.0, 0.15]
     geom       = "harv-back.vtk"
     maxlevel   = 4
     sampl_dist = 3.0
 }
 Config
 {
-    cfl        = 0.6
+    cfl        = 0.25
     init_file  = "none"
     nt_max     = 25000
-    nt_skip    = 100
+    nt_skip    = 250
 }
 Fluid
 {

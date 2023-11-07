@@ -212,8 +212,8 @@ int main(int argc, char** argv)
     
     //define the time integrator
     spade::time_integration::time_axis_t axis(time0, dt);
-	//	spade::time_integration::ssprk34_t alg;
-	spade::time_integration::rk2_t alg;
+	spade::time_integration::ssprk34_t alg;
+	//spade::time_integration::rk2_t alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
     spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, bc, trans);
     
