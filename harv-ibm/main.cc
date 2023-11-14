@@ -6,6 +6,7 @@
 
 #include "sample_cloud.h"
 #include "fill_ghosts.h"
+#include "surf_vtk.h"
 
 using real_t = double;
 using flux_t = spade::fluid_state::flux_t<real_t>;
@@ -43,6 +44,7 @@ int main(int argc, char** argv)
     const real_t      targ_cfl  = input["Config"]["cfl"];
     const int         nt_max    = input["Config"]["nt_max"];
     const int         nt_skip   = input["Config"]["nt_skip"];
+    const int         nt_surf   = input["Config"]["nt_surf"];
     
     spade::ctrs::array<int,    3> num_blocks     = input["Grid"]["nblck"];
     spade::ctrs::array<int,    3> num_cells      = input["Grid"]["ncell"];
@@ -53,10 +55,12 @@ int main(int argc, char** argv)
     const std::string geom_fname = input["Grid"]["geom"];
     const int         maxlevel   = input["Grid"]["maxlevel"];
     const real_t      sampl_dist = input["Grid"]["sampl_dist"];
+    const real_t  out_sampl_dist = input["Grid"]["out_sampl_dist"];
+    
 
     spade::coords::identity<real_t> coords;
     
-    std::filesystem::path out_path("checkpoint");
+    std::filesystem::path out_path("surface");
     if (!std::filesystem::is_directory(out_path)) std::filesystem::create_directory(out_path);
     
     spade::ctrs::array<bool, 3> periodic = false;
@@ -115,6 +119,9 @@ int main(int argc, char** argv)
     spade::grid::grid_array rhs  (grid, fill2, spade::device::best);
     
     auto interp = spade::grid::create_interpolation(prim, ips);
+    
+    auto surf_cloud = local::get_surf_sampl(geom, out_sampl_dist*dx);
+    auto surf_sampl = spade::grid::create_interpolation(prim, surf_cloud);
 
     const real_t Tinf  = 75.0;
     const real_t Pinf  = 5000.0;
@@ -125,7 +132,7 @@ int main(int argc, char** argv)
     const real_t vv = Uinf*sin(theta);
     const real_t ww = 0.0;
     
-    auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x)
+    auto ini = [=] _sp_hybrid (const spade::coords::point_t<real_t>& x)
     {
         prim_t output;
         output.p() = Pinf;
@@ -140,7 +147,6 @@ int main(int argc, char** argv)
     
     auto sampldata = spade::grid::sample_array(prim, interp);
     
-    
     if (init_file != "none")
     {
         if (group.isroot()) print("reading...");
@@ -152,14 +158,14 @@ int main(int argc, char** argv)
     const auto s0 = spade::convective::cent_keep<2>(air);
     // spade::convective::rusanov_t       flx    (air);
     // spade::convective::weno_t          s1     (flx);
-    // spade::state_sensor::ducros_t      ducr   (1.0e-3);
+    spade::state_sensor::ducros_t      ducr   (1.0e-1);
     // spade::convective::first_order_t s1(air);
-    // spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
+    spade::convective::first_order_t s1(air);
+    // spade::convective::muscl_t       s0(air);
+    spade::convective::hybrid_scheme_t tscheme(s0, s1, ducr);
     
     // const auto tscheme = spade::convective::cent_keep<2>(air);
     
-    spade::convective::first_order_t tscheme(air);
-    // spade::convective::muscl_t tscheme(air);
     
     const auto get_sig = [&](const prim_t& q) { return std::sqrt(air.gamma*air.R*q.T()) + std::sqrt(q.u()*q.u() + q.v()*q.v() + q.w()*q.w()); };
     
@@ -181,14 +187,14 @@ int main(int argc, char** argv)
     
     using parray_t = decltype(prim);
     
-    const auto symmetry = _sp_lambda(const prim_t& q, const int dir)
+    const auto symmetry = [=] _sp_hybrid (const prim_t& q, const int dir)
     {
         prim_t q2 = q;
         q2.u(dir) = -q2.u(dir);
         return q2;
     };
     
-    const auto freestream = _sp_lambda(const prim_t& q, const int&)
+    const auto freestream = [=] _sp_hybrid (const prim_t& q, const int&)
     {
         return prim_t{Pinf, Tinf, uu, vv, ww};
     };
@@ -215,9 +221,6 @@ int main(int argc, char** argv)
     spade::time_integration::rk2_t         alg;
     spade::time_integration::integrator_data_t q(prim, rhs, alg);
     spade::time_integration::integrator_t      time_int(axis, alg, q, calc_rhs, boundary_cond, trans);
-    
-    spade::timing::mtimer_t tmr("ointerval");
-    tmr.start("ointerval");
     for (auto nt: range(0, nt_max+1))
     {
         const real_t umax = umax_ini;
@@ -230,14 +233,22 @@ int main(int argc, char** argv)
         }
         if (nt%nt_skip == 0)
         {
-            tmr.stop("ointerval");
             if (group.isroot()) print("Output solution...");
             std::string nstr = spade::utils::zfill(nt, 8);
             std::string filename = "prims"+nstr;
             spade::io::output_vtk("output", filename, time_int.solution());
             if (group.isroot()) print("Done.");
-            if (group.isroot()) print(tmr);
-            tmr.start("ointerval");
+        }
+        
+        if (nt%nt_surf == 0)
+        {
+            if (group.isroot()) print("Output surface...");
+            std::string nstr = spade::utils::zfill(nt, 8);
+            std::string filename = "surface/surf"+nstr + ".vtk";
+            spade::device::shared_vector<prim_t> surfdata;
+            spade::grid::sample_array(surfdata, time_int.solution(), surf_sampl);
+            local::output_surf_vtk(filename, geom, surfdata.data(spade::device::cpu));
+            if (group.isroot()) print("Done.");
         }
         time_int.advance();
     }

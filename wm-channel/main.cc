@@ -36,7 +36,7 @@ int main(int argc, char** argv)
     air.R     = input["Fluid"]["Rgas"];
     
     const real_t mach = input["Fluid"]["mach"];
-    const real_t aoa  = input["Fluid"]["aoa"];
+    const real_t tau  = input["Fluid"]["tau"];
     
     
     const std::string init_file = input["Config"]["init_file"];
@@ -50,9 +50,6 @@ int main(int argc, char** argv)
     spade::ctrs::array<real_t, 6> bnd            = input["Grid"]["bounds"];
     spade::bound_box_t<real_t, 3> bounds;
     bounds.bnds = bnd;
-    const std::string geom_fname = input["Grid"]["geom"];
-    const int         maxlevel   = input["Grid"]["maxlevel"];
-    const real_t      sampl_dist = input["Grid"]["sampl_dist"];
 
     spade::coords::identity<real_t> coords;
     
@@ -66,65 +63,6 @@ int main(int argc, char** argv)
     spade::grid::cartesian_grid_t grid(num_cells, exchange_cells, blocks, coords, group);
     if (group.isroot()) print("Done");
     
-    if (group.isroot()) print("Read", geom_fname);
-    spade::geom::vtk_geom_t<3> geom;
-    spade::geom::read_vtk_geom(geom_fname, geom);
-    if (group.isroot()) print("Done");
-    
-    using refine_t = typename decltype(blocks)::refine_type;
-    refine_t ref0  = {true, true, true};
-    
-    const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0))*pow(2.0, -maxlevel);
-    if (group.isroot()) print("Begin refine");
-    int iter = 0;
-    while (true)
-    {
-        if (group.isroot()) print(" -- iteration", iter++);
-        if (group.isroot()) print(" ---- points:", grid.get_grid_size());
-        const auto bndy_intersect = [&](const auto& lb)
-        {
-            if (grid.get_blocks().get_amr_node(lb).level[0] >= maxlevel) return false;
-            const auto bnd = grid.get_bounding_box(lb);
-            return geom.box_contains_boundary(bnd);
-        };
-        auto rblks = grid.select_blocks(bndy_intersect, spade::partition::global);
-        if (rblks.size() == 0) break;
-        grid.refine_blocks(rblks, periodic);
-    }
-    
-    const auto expd = [&](const auto& lb)
-    {
-        const auto& node = grid.get_blocks().get_amr_node(lb);
-        if (node.level[0] == maxlevel) return false;
-        for (const auto& e: node.neighbors)
-        {
-            const auto& neigh = e.endpoint.get();
-            if (neigh.level[0] == maxlevel)
-            {
-                return true;
-            }
-        }
-        return false;
-    };
-    
-    auto rblks = grid.select_blocks(expd, spade::partition::global);
-    if (maxlevel > 0)
-    {
-        grid.refine_blocks(rblks, periodic);
-    }
-    
-    if (group.isroot()) print("Done");
-    if (group.isroot()) print("Num. points:", grid.get_grid_size());
-    
-    if (group.isroot()) print("Compute ghosts");
-    const auto ghosts = spade::ibm::compute_ghosts(grid, geom);
-    if (group.isroot()) print("Done");
-    
-    if (group.isroot()) print("Compute ips");
-    auto ips = local::compute_ghost_sample_points(ghosts, grid, sampl_dist*dx);
-    spade::io::output_vtk("debug/ips.vtk", ips);
-    if (group.isroot()) print("Done");
-    
     auto handle = spade::grid::create_exchange(grid, group, periodic);
     
     prim_t fill1 = 0.0;
@@ -132,19 +70,9 @@ int main(int argc, char** argv)
 
     spade::grid::grid_array prim (grid, fill1, spade::device::best);
     spade::grid::grid_array rhs  (grid, fill2, spade::device::best);
-    
-    auto interp = spade::grid::create_interpolation(prim, ips);
 
-    const real_t Tinf  = 75.0;
-    const real_t Pinf  = 5000.0;
-    const real_t Uinf  = mach*sqrt(air.gamma*air.R*Tinf);
-    const real_t theta = spade::consts::pi*aoa/180.0;
-    
-    const real_t uu = Uinf*cos(theta);
-    const real_t vv = Uinf*sin(theta);
-    const real_t ww = 0.0;
-    
-    auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x)
+    const auto delta = 0.5*bounds.size(1);
+    auto ini = _sp_lambda (const spade::coords::point_t<real_t>& x, const spade::grid::cell_idx_t& ii)
     {
         prim_t output;
         output.p() = Pinf;

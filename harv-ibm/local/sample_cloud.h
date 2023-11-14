@@ -32,4 +32,24 @@ namespace local
     {
         return compute_ghost_sample_points(ghosts, grid, [sdist](const auto&){ return sdist; });
     }
+    
+    template <typename geom_t, typename real_t>
+    auto get_surf_sampl(const geom_t& geom, const real_t dist)
+    {
+        using pnt_t = spade::coords::point_t<real_t>;
+        spade::device::shared_vector<pnt_t> ips;
+        for (std::size_t i = 0; i < geom.faces.size(); ++i)
+        {
+            auto x = geom.centroid(i);
+            auto x_smpl = x;
+            x_smpl += dist*geom.normals[i];
+            if (x_smpl[2] < 0.0)
+            {
+                x_smpl[2] *= -1;
+            }
+            ips.push_back(x_smpl);
+        }
+        ips.transfer();
+        return ips;
+    }
 }
