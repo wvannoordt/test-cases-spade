@@ -109,6 +109,8 @@ int main(int argc, char** argv)
     spade::grid::cartesian_grid_t grid(cells_in_block, exchange_cells, blocks, coords, group);
     spade::ctrs::array<bool, 3> periodic = true;
     auto handle = spade::grid::create_exchange(grid, group, periodic);
+
+	if (group.isroot()) print("points:", grid.get_grid_size());
     
     
     //create arrays residing on the grid
@@ -186,8 +188,8 @@ int main(int argc, char** argv)
     real_t time0 = 0.0;
     const real_t dx       = spade::utils::min(grid.get_dx(0, 0), grid.get_dx(1, 0), grid.get_dx(2, 0));
     // const real_t umax_ini = spade::algs::transform_reduce(prim, get_u, max_op);
-    // const real_t dt       = targ_cfl*dx/umax_ini;
-    const real_t dt = 0.010639;
+    const real_t umax_ini = u0 + sqrt(gamma*rgas*T0);
+    const real_t dt       = targ_cfl*dx/umax_ini;
     
     const real_t t_characteristic = L/u0;
     
@@ -212,9 +214,24 @@ int main(int argc, char** argv)
     
     //define the time integrator
     spade::time_integration::time_axis_t axis(time0, dt);
-	spade::time_integration::ssprk34_t alg;
-	//spade::time_integration::rk2_t alg;
-    spade::time_integration::integrator_data_t q(prim, rhs, alg);
+	// spade::time_integration::crank_nicholson_t alg(0.93);
+    spade::time_integration::crank_nicholson_t alg(0.875);
+    // spade::time_integration::crank_nicholson_t alg(0.65);
+    // spade::time_integration::ssprk34_t alg;
+    // spade::time_integration::rk2_t alg;
+    spade::time_integration::integrator_data_t<decltype(prim), decltype(rhs), decltype(alg)> q(alg);
+    q.solution_data[0] = prim;
+    prim.clear();
+    for (int zz = 1; zz < q.solution_data.size(); ++zz)
+    {
+        q.solution_data[zz] = q.solution_data[0];
+    }
+    q.residual_data[0] = rhs;
+    rhs.clear();
+    for (int zz = 1; zz < q.residual_data.size(); ++zz)
+    {
+        q.residual_data[zz] = q.residual_data[0];
+    }
     spade::time_integration::integrator_t time_int(axis, alg, q, calc_rhs, bc, trans);
     
     
